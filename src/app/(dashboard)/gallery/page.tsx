@@ -41,7 +41,7 @@ export default function GalleryPage() {
     const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
     // Get unique tags
-    const allTags = [...new Set(items.flatMap((item) => item.tags))];
+    const allTags = Array.from(new Set(items.flatMap((item) => item.tags)));
 
     const filteredItems = items.filter((item) => {
         const matchesSearch =
