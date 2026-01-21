@@ -3,17 +3,20 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { formatCurrency } from "@/lib/utils";
-import { Wallet } from "lucide-react";
+import { Wallet, Plus } from "lucide-react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 interface BudgetWidgetProps {
-    budget: number;
-    spent: number;
+    budget?: number;
+    spent?: number;
 }
 
-export function BudgetWidget({ budget = 50000, spent = 32500 }: BudgetWidgetProps) {
-    const remaining = budget - spent;
-    const percentage = Math.min((spent / budget) * 100, 100);
-    const isOverBudget = spent > budget;
+export function BudgetWidget({ budget, spent }: BudgetWidgetProps) {
+    const hasData = budget !== undefined && budget > 0;
+    const remaining = hasData ? budget - (spent || 0) : 0;
+    const percentage = hasData ? Math.min(((spent || 0) / budget) * 100, 100) : 0;
+    const isOverBudget = hasData && (spent || 0) > budget;
 
     return (
         <Card className="relative overflow-hidden">
@@ -27,24 +30,38 @@ export function BudgetWidget({ budget = 50000, spent = 32500 }: BudgetWidgetProp
                 </div>
             </CardHeader>
             <CardContent>
-                <div className="space-y-3">
-                    <div>
-                        <div className="text-2xl font-bold">
-                            {formatCurrency(remaining)}
+                {hasData ? (
+                    <div className="space-y-3">
+                        <div>
+                            <div className="text-2xl font-bold">
+                                {formatCurrency(remaining)}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                remaining of {formatCurrency(budget)}
+                            </p>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                            remaining of {formatCurrency(budget)}
+                        <Progress
+                            value={percentage}
+                            className={`h-2 ${isOverBudget ? "[&>div]:bg-destructive" : "[&>div]:bg-emerald-500"}`}
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>Spent: {formatCurrency(spent || 0)}</span>
+                            <span>{percentage.toFixed(0)}%</span>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="py-4 text-center">
+                        <p className="text-sm text-muted-foreground mb-3">
+                            No budget set yet
                         </p>
+                        <Button variant="outline" size="sm" asChild>
+                            <Link href="/settings">
+                                <Plus className="h-4 w-4 mr-1" />
+                                Set Budget
+                            </Link>
+                        </Button>
                     </div>
-                    <Progress
-                        value={percentage}
-                        className={`h-2 ${isOverBudget ? "[&>div]:bg-destructive" : "[&>div]:bg-emerald-500"}`}
-                    />
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Spent: {formatCurrency(spent)}</span>
-                        <span>{percentage.toFixed(0)}%</span>
-                    </div>
-                </div>
+                )}
             </CardContent>
         </Card>
     );

@@ -13,22 +13,27 @@ export default function DashboardPage() {
         <div className="space-y-6">
             {/* Header */}
             <div className="hidden md:block">
-                <h1 className="text-2xl font-bold tracking-tight">{greeting}, Subodh</h1>
+                <h1 className="text-2xl font-bold tracking-tight">{greeting}</h1>
                 <p className="text-muted-foreground">
                     Here&apos;s what&apos;s happening with your life today.
                 </p>
             </div>
 
+            {/* Mobile Header */}
+            <div className="md:hidden">
+                <h1 className="text-xl font-bold tracking-tight">{greeting}</h1>
+            </div>
+
             {/* Widgets Grid */}
-            <div className="grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                 {/* Row 1 */}
-                <BudgetWidget budget={50000} spent={32500} />
+                <BudgetWidget />
                 <TasksWidget />
-                <NetWorthWidget balance={125000} investments={350000} debts={50000} />
+                <NetWorthWidget />
 
                 {/* Row 2 */}
                 <ExpensesWidget />
-                <HabitsWidget gymStreak={12} gymDays={18} readingStreak={5} meditationStreak={3} />
+                <HabitsWidget />
                 <QuickLinksWidget />
             </div>
 

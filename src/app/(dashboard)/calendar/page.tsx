@@ -30,19 +30,10 @@ interface CalendarEvent {
     color: string;
 }
 
-const sampleEvents: CalendarEvent[] = [
-    { id: "1", title: "Electricity Bill Due", date: "2026-01-25", type: "bill", color: "#ef4444" },
-    { id: "2", title: "Mom's Birthday", date: "2026-01-28", type: "birthday", color: "#ec4899" },
-    { id: "3", title: "Project Deadline", date: "2026-01-23", type: "task", color: "#3b82f6" },
-    { id: "4", title: "Gym", date: "2026-01-21", type: "habit", color: "#22c55e" },
-    { id: "5", title: "Gym", date: "2026-01-20", type: "habit", color: "#22c55e" },
-    { id: "6", title: "Gym", date: "2026-01-19", type: "habit", color: "#22c55e" },
-    { id: "7", title: "Internet Bill", date: "2026-01-28", type: "bill", color: "#ef4444" },
-];
-
 export default function CalendarPage() {
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
+    const [events] = useState<CalendarEvent[]>([]);
 
     const monthStart = startOfMonth(currentMonth);
     const monthEnd = endOfMonth(currentMonth);
@@ -60,7 +51,7 @@ export default function CalendarPage() {
 
     const getEventsForDate = (date: Date) => {
         const dateStr = format(date, "yyyy-MM-dd");
-        return sampleEvents.filter((event) => event.date === dateStr);
+        return events.filter((event) => event.date === dateStr);
     };
 
     const selectedDateEvents = selectedDate ? getEventsForDate(selectedDate) : [];
@@ -68,12 +59,12 @@ export default function CalendarPage() {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight">Calendar</h1>
-                    <p className="text-muted-foreground">View all your events</p>
+                    <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Calendar</h1>
+                    <p className="text-muted-foreground text-sm">View all your events</p>
                 </div>
-                <Button variant="outline" onClick={goToToday}>
+                <Button variant="outline" onClick={goToToday} className="w-full sm:w-auto">
                     Today
                 </Button>
             </div>
@@ -86,7 +77,7 @@ export default function CalendarPage() {
                             <Button variant="ghost" size="icon" onClick={goToPreviousMonth}>
                                 <ChevronLeft className="h-5 w-5" />
                             </Button>
-                            <CardTitle>{format(currentMonth, "MMMM yyyy")}</CardTitle>
+                            <CardTitle className="text-base sm:text-lg">{format(currentMonth, "MMMM yyyy")}</CardTitle>
                             <Button variant="ghost" size="icon" onClick={goToNextMonth}>
                                 <ChevronRight className="h-5 w-5" />
                             </Button>
@@ -95,18 +86,19 @@ export default function CalendarPage() {
                     <CardContent>
                         {/* Day headers */}
                         <div className="grid grid-cols-7 mb-2">
-                            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                            {["S", "M", "T", "W", "T", "F", "S"].map((day, i) => (
                                 <div
-                                    key={day}
-                                    className="text-center text-sm font-medium text-muted-foreground py-2"
+                                    key={i}
+                                    className="text-center text-xs sm:text-sm font-medium text-muted-foreground py-2"
                                 >
-                                    {day}
+                                    <span className="sm:hidden">{day}</span>
+                                    <span className="hidden sm:inline">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][i]}</span>
                                 </div>
                             ))}
                         </div>
 
                         {/* Calendar days */}
-                        <div className="grid grid-cols-7 gap-1">
+                        <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
                             {days.map((day, index) => {
                                 const dayEvents = getEventsForDate(day);
                                 const isSelected = selectedDate && isSameDay(day, selectedDate);
@@ -117,20 +109,20 @@ export default function CalendarPage() {
                                         key={index}
                                         onClick={() => setSelectedDate(day)}
                                         className={`
-                      aspect-square p-1 rounded-lg text-sm relative
-                      ${isCurrentMonth ? "" : "text-muted-foreground/50"}
-                      ${isToday(day) ? "bg-primary text-primary-foreground" : ""}
-                      ${isSelected && !isToday(day) ? "bg-accent" : ""}
-                      ${!isSelected && !isToday(day) ? "hover:bg-accent/50" : ""}
-                    `}
+                                            aspect-square p-0.5 sm:p-1 rounded-lg text-xs sm:text-sm relative
+                                            ${isCurrentMonth ? "" : "text-muted-foreground/50"}
+                                            ${isToday(day) ? "bg-primary text-primary-foreground" : ""}
+                                            ${isSelected && !isToday(day) ? "bg-accent" : ""}
+                                            ${!isSelected && !isToday(day) ? "hover:bg-accent/50" : ""}
+                                        `}
                                     >
                                         <span className="block">{format(day, "d")}</span>
                                         {dayEvents.length > 0 && (
-                                            <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5">
+                                            <div className="absolute bottom-0.5 sm:bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5">
                                                 {dayEvents.slice(0, 3).map((event, i) => (
                                                     <div
                                                         key={i}
-                                                        className="w-1.5 h-1.5 rounded-full"
+                                                        className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full"
                                                         style={{ backgroundColor: event.color }}
                                                     />
                                                 ))}
@@ -176,6 +168,7 @@ export default function CalendarPage() {
                             <div className="text-center py-8 text-muted-foreground">
                                 <CalendarIcon className="h-12 w-12 mx-auto mb-2 opacity-20" />
                                 <p className="text-sm">No events on this day</p>
+                                <p className="text-xs mt-1">Events from tasks, bills, and birthdays will appear here</p>
                             </div>
                         )}
                     </CardContent>
@@ -184,23 +177,23 @@ export default function CalendarPage() {
 
             {/* Legend */}
             <Card>
-                <CardContent className="p-4">
-                    <div className="flex flex-wrap gap-4 justify-center">
+                <CardContent className="p-3 sm:p-4">
+                    <div className="flex flex-wrap gap-3 sm:gap-4 justify-center">
                         <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full bg-blue-500" />
-                            <span className="text-sm text-muted-foreground">Tasks</span>
+                            <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-blue-500" />
+                            <span className="text-xs sm:text-sm text-muted-foreground">Tasks</span>
                         </div>
                         <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full bg-red-500" />
-                            <span className="text-sm text-muted-foreground">Bills</span>
+                            <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-red-500" />
+                            <span className="text-xs sm:text-sm text-muted-foreground">Bills</span>
                         </div>
                         <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full bg-pink-500" />
-                            <span className="text-sm text-muted-foreground">Birthdays</span>
+                            <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-pink-500" />
+                            <span className="text-xs sm:text-sm text-muted-foreground">Birthdays</span>
                         </div>
                         <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full bg-green-500" />
-                            <span className="text-sm text-muted-foreground">Habits</span>
+                            <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-green-500" />
+                            <span className="text-xs sm:text-sm text-muted-foreground">Habits</span>
                         </div>
                     </div>
                 </CardContent>

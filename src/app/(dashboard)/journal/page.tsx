@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
     BookOpen,
@@ -28,11 +27,11 @@ export default function JournalPage() {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [entry, setEntry] = useState<DailyEntry>({
         date: format(currentDate, "yyyy-MM-dd"),
-        notes: "Today was a productive day. Managed to complete most of my tasks and had a good workout session.",
-        studied: "Read about Next.js 14 App Router and Supabase authentication patterns.",
-        gymDone: true,
-        gymNotes: "Chest and triceps day. 4 sets of bench press, incline dumbbell press, and cable flyes.",
-        mood: 4,
+        notes: "",
+        studied: "",
+        gymDone: false,
+        gymNotes: "",
+        mood: 3,
     });
 
     const goToPreviousDay = () => {
@@ -64,27 +63,25 @@ export default function JournalPage() {
     return (
         <div className="space-y-6 max-w-2xl mx-auto">
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight">Daily Journal</h1>
-                    <p className="text-muted-foreground">
-                        Record your thoughts and activities
-                    </p>
-                </div>
+            <div>
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Daily Journal</h1>
+                <p className="text-muted-foreground text-sm">
+                    Record your thoughts and activities
+                </p>
             </div>
 
             {/* Date Navigation */}
             <Card>
-                <CardContent className="p-4">
+                <CardContent className="p-3 sm:p-4">
                     <div className="flex items-center justify-between">
                         <Button variant="ghost" size="icon" onClick={goToPreviousDay}>
                             <ChevronLeft className="h-5 w-5" />
                         </Button>
                         <div className="text-center">
-                            <p className="font-semibold text-lg">
+                            <p className="font-semibold text-base sm:text-lg">
                                 {format(currentDate, "EEEE")}
                             </p>
-                            <p className="text-muted-foreground">
+                            <p className="text-muted-foreground text-sm">
                                 {format(currentDate, "MMMM d, yyyy")}
                             </p>
                         </div>
@@ -111,13 +108,13 @@ export default function JournalPage() {
                             <button
                                 key={mood.value}
                                 onClick={() => setEntry({ ...entry, mood: mood.value })}
-                                className={`flex flex-col items-center gap-1 p-2 rounded-lg transition-all ${entry.mood === mood.value
-                                        ? "bg-primary/10 scale-110"
-                                        : "hover:bg-accent"
+                                className={`flex flex-col items-center gap-1 p-1.5 sm:p-2 rounded-lg transition-all ${entry.mood === mood.value
+                                    ? "bg-primary/10 scale-110"
+                                    : "hover:bg-accent"
                                     }`}
                             >
-                                <span className="text-2xl">{mood.emoji}</span>
-                                <span className="text-xs text-muted-foreground">{mood.label}</span>
+                                <span className="text-xl sm:text-2xl">{mood.emoji}</span>
+                                <span className="text-[10px] sm:text-xs text-muted-foreground">{mood.label}</span>
                             </button>
                         ))}
                     </div>
@@ -134,7 +131,7 @@ export default function JournalPage() {
                 </CardHeader>
                 <CardContent>
                     <textarea
-                        className="w-full min-h-[120px] p-3 rounded-lg border bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                        className="w-full min-h-[100px] sm:min-h-[120px] p-3 rounded-lg border bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring text-sm"
                         placeholder="How was your day? What's on your mind?"
                         value={entry.notes}
                         onChange={(e) => setEntry({ ...entry, notes: e.target.value })}
@@ -151,7 +148,7 @@ export default function JournalPage() {
                 </CardHeader>
                 <CardContent>
                     <textarea
-                        className="w-full min-h-[80px] p-3 rounded-lg border bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                        className="w-full min-h-[70px] sm:min-h-[80px] p-3 rounded-lg border bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring text-sm"
                         placeholder="What did you learn today?"
                         value={entry.studied}
                         onChange={(e) => setEntry({ ...entry, studied: e.target.value })}
@@ -168,8 +165,8 @@ export default function JournalPage() {
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <div className="flex items-center gap-4">
-                        <Label>Did you workout today?</Label>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                        <Label className="text-sm">Did you workout today?</Label>
                         <div className="flex gap-2">
                             <Button
                                 variant={entry.gymDone ? "default" : "outline"}
@@ -189,7 +186,7 @@ export default function JournalPage() {
                     </div>
                     {entry.gymDone && (
                         <textarea
-                            className="w-full min-h-[80px] p-3 rounded-lg border bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                            className="w-full min-h-[70px] sm:min-h-[80px] p-3 rounded-lg border bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring text-sm"
                             placeholder="What exercises did you do?"
                             value={entry.gymNotes}
                             onChange={(e) => setEntry({ ...entry, gymNotes: e.target.value })}

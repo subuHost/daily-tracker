@@ -12,7 +12,7 @@ import {
     Phone,
     Mail,
     Cake,
-    User,
+    Users,
 } from "lucide-react";
 import { formatDate, getInitials } from "@/lib/utils";
 
@@ -25,18 +25,9 @@ interface Contact {
     notes?: string;
 }
 
-const sampleContacts: Contact[] = [
-    { id: "1", name: "Mom", phone: "+91 98765 43210", birthday: "1965-05-15" },
-    { id: "2", name: "Dad", phone: "+91 98765 43211", birthday: "1962-08-22" },
-    { id: "3", name: "Rahul Sharma", phone: "+91 98765 12345", email: "rahul@email.com" },
-    { id: "4", name: "Priya Singh", phone: "+91 87654 32109", email: "priya@email.com", birthday: "1995-03-10" },
-    { id: "5", name: "Amit Kumar", email: "amit.kumar@work.com", notes: "College friend" },
-    { id: "6", name: "Dr. Verma", phone: "+91 99887 76655", notes: "Family doctor" },
-];
-
 export default function ContactsPage() {
     const [searchQuery, setSearchQuery] = useState("");
-    const [contacts] = useState<Contact[]>(sampleContacts);
+    const [contacts] = useState<Contact[]>([]);
 
     const filteredContacts = contacts.filter((contact) =>
         contact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -57,12 +48,12 @@ export default function ContactsPage() {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight">Contacts</h1>
-                    <p className="text-muted-foreground">{contacts.length} contacts</p>
+                    <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Contacts</h1>
+                    <p className="text-muted-foreground text-sm">{contacts.length} contacts</p>
                 </div>
-                <Button asChild>
+                <Button asChild className="w-full sm:w-auto">
                     <Link href="/contacts/new">
                         <Plus className="mr-2 h-4 w-4" />
                         Add Contact
@@ -82,60 +73,78 @@ export default function ContactsPage() {
             </div>
 
             {/* Contacts List */}
-            <div className="space-y-6">
-                {sortedLetters.map((letter) => (
-                    <div key={letter}>
-                        <h2 className="text-sm font-semibold text-muted-foreground mb-2 sticky top-0 bg-background py-1">
-                            {letter}
-                        </h2>
-                        <div className="space-y-2">
-                            {groupedContacts[letter].map((contact) => (
-                                <Card key={contact.id} className="hover:bg-accent/50 transition-colors cursor-pointer">
-                                    <CardContent className="p-4">
-                                        <div className="flex items-center gap-4">
-                                            <Avatar className="h-12 w-12">
-                                                <AvatarFallback className="bg-primary text-primary-foreground">
-                                                    {getInitials(contact.name)}
-                                                </AvatarFallback>
-                                            </Avatar>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-medium">{contact.name}</p>
-                                                <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-muted-foreground">
-                                                    {contact.phone && (
-                                                        <span className="flex items-center gap-1">
-                                                            <Phone className="h-3 w-3" />
-                                                            {contact.phone}
-                                                        </span>
-                                                    )}
-                                                    {contact.email && (
-                                                        <span className="flex items-center gap-1">
-                                                            <Mail className="h-3 w-3" />
-                                                            {contact.email}
-                                                        </span>
-                                                    )}
-                                                    {contact.birthday && (
-                                                        <span className="flex items-center gap-1">
-                                                            <Cake className="h-3 w-3 text-pink-500" />
-                                                            {formatDate(contact.birthday)}
-                                                        </span>
-                                                    )}
+            {contacts.length > 0 ? (
+                <div className="space-y-6">
+                    {sortedLetters.map((letter) => (
+                        <div key={letter}>
+                            <h2 className="text-sm font-semibold text-muted-foreground mb-2 sticky top-0 bg-background py-1">
+                                {letter}
+                            </h2>
+                            <div className="space-y-2">
+                                {groupedContacts[letter].map((contact) => (
+                                    <Card key={contact.id} className="hover:bg-accent/50 transition-colors cursor-pointer">
+                                        <CardContent className="p-3 sm:p-4">
+                                            <div className="flex items-center gap-3 sm:gap-4">
+                                                <Avatar className="h-10 w-10 sm:h-12 sm:w-12">
+                                                    <AvatarFallback className="bg-primary text-primary-foreground text-sm sm:text-base">
+                                                        {getInitials(contact.name)}
+                                                    </AvatarFallback>
+                                                </Avatar>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-medium text-sm sm:text-base">{contact.name}</p>
+                                                    <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-1 sm:gap-3 mt-1 text-xs sm:text-sm text-muted-foreground">
+                                                        {contact.phone && (
+                                                            <span className="flex items-center gap-1">
+                                                                <Phone className="h-3 w-3" />
+                                                                <span className="truncate">{contact.phone}</span>
+                                                            </span>
+                                                        )}
+                                                        {contact.email && (
+                                                            <span className="flex items-center gap-1">
+                                                                <Mail className="h-3 w-3" />
+                                                                <span className="truncate">{contact.email}</span>
+                                                            </span>
+                                                        )}
+                                                        {contact.birthday && (
+                                                            <span className="flex items-center gap-1">
+                                                                <Cake className="h-3 w-3 text-pink-500" />
+                                                                {formatDate(contact.birthday)}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            ))}
+                                        </CardContent>
+                                    </Card>
+                                ))}
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    ))}
 
-                {filteredContacts.length === 0 && (
-                    <div className="text-center py-12 text-muted-foreground">
-                        <User className="h-12 w-12 mx-auto mb-2 opacity-20" />
-                        <p>No contacts found</p>
+                    {filteredContacts.length === 0 && contacts.length > 0 && (
+                        <div className="text-center py-12 text-muted-foreground">
+                            <Users className="h-12 w-12 mx-auto mb-2 opacity-20" />
+                            <p>No contacts found for "{searchQuery}"</p>
+                        </div>
+                    )}
+                </div>
+            ) : (
+                <div className="text-center py-16">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+                        <Users className="h-8 w-8 text-muted-foreground" />
                     </div>
-                )}
-            </div>
+                    <h3 className="text-lg font-medium mb-2">No contacts yet</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                        Keep track of important contacts and their birthdays.
+                    </p>
+                    <Button asChild>
+                        <Link href="/contacts/new">
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add Your First Contact
+                        </Link>
+                    </Button>
+                </div>
+            )}
         </div>
     );
 }

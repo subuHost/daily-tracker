@@ -12,6 +12,7 @@ import {
     Circle,
     Calendar,
     Flag,
+    ClipboardList,
 } from "lucide-react";
 import { formatShortDate } from "@/lib/utils";
 
@@ -25,19 +26,9 @@ interface Task {
     project?: string;
 }
 
-const sampleTasks: Task[] = [
-    { id: "1", title: "Review monthly expenses", completed: false, dueDate: "2026-01-22", priority: "high", project: "Finance" },
-    { id: "2", title: "Update investment portfolio", completed: false, dueDate: "2026-01-25", priority: "medium", project: "Finance" },
-    { id: "3", title: "Call insurance company", completed: true, priority: "low", project: "Personal" },
-    { id: "4", title: "Plan weekend trip", completed: false, dueDate: "2026-01-24", priority: "medium", project: "Personal" },
-    { id: "5", title: "Read 20 pages of book", completed: false, priority: "low", project: "Self Improvement" },
-    { id: "6", title: "Prepare presentation", completed: false, dueDate: "2026-01-23", priority: "high", project: "Work" },
-    { id: "7", title: "Gym workout", completed: true, priority: "medium", project: "Health" },
-];
-
 export default function TasksPage() {
     const [searchQuery, setSearchQuery] = useState("");
-    const [tasks, setTasks] = useState<Task[]>(sampleTasks);
+    const [tasks, setTasks] = useState<Task[]>([]);
 
     const filteredTasks = tasks.filter((task) =>
         task.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -66,7 +57,7 @@ export default function TasksPage() {
                 }`}
             onClick={() => toggleTask(task.id)}
         >
-            <CardContent className="p-4">
+            <CardContent className="p-3 sm:p-4">
                 <div className="flex items-start gap-3">
                     <div className="mt-0.5">
                         {task.completed ? (
@@ -76,7 +67,7 @@ export default function TasksPage() {
                         )}
                     </div>
                     <div className="flex-1 min-w-0">
-                        <p className={`font-medium ${task.completed ? "line-through" : ""}`}>
+                        <p className={`font-medium text-sm sm:text-base ${task.completed ? "line-through" : ""}`}>
                             {task.title}
                         </p>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -105,14 +96,14 @@ export default function TasksPage() {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight">Tasks</h1>
-                    <p className="text-muted-foreground">
+                    <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Tasks</h1>
+                    <p className="text-muted-foreground text-sm">
                         {incompleteTasks.length} tasks remaining
                     </p>
                 </div>
-                <Button asChild>
+                <Button asChild className="w-full sm:w-auto">
                     <Link href="/tasks/new">
                         <Plus className="mr-2 h-4 w-4" />
                         Add Task
@@ -131,31 +122,52 @@ export default function TasksPage() {
                 />
             </div>
 
-            {/* Active Tasks */}
-            <div className="space-y-3">
-                <h2 className="text-sm font-medium text-muted-foreground">
-                    To Do ({incompleteTasks.length})
-                </h2>
-                {incompleteTasks.map((task) => (
-                    <TaskCard key={task.id} task={task} />
-                ))}
-                {incompleteTasks.length === 0 && (
-                    <div className="text-center py-8 text-muted-foreground">
-                        <CheckCircle2 className="h-12 w-12 mx-auto mb-2 opacity-20" />
-                        <p>All tasks completed!</p>
+            {/* Tasks Content */}
+            {tasks.length > 0 ? (
+                <>
+                    {/* Active Tasks */}
+                    <div className="space-y-3">
+                        <h2 className="text-sm font-medium text-muted-foreground">
+                            To Do ({incompleteTasks.length})
+                        </h2>
+                        {incompleteTasks.map((task) => (
+                            <TaskCard key={task.id} task={task} />
+                        ))}
+                        {incompleteTasks.length === 0 && (
+                            <div className="text-center py-8 text-muted-foreground">
+                                <CheckCircle2 className="h-12 w-12 mx-auto mb-2 opacity-20" />
+                                <p>All tasks completed!</p>
+                            </div>
+                        )}
                     </div>
-                )}
-            </div>
 
-            {/* Completed Tasks */}
-            {completedTasks.length > 0 && (
-                <div className="space-y-3">
-                    <h2 className="text-sm font-medium text-muted-foreground">
-                        Completed ({completedTasks.length})
-                    </h2>
-                    {completedTasks.map((task) => (
-                        <TaskCard key={task.id} task={task} />
-                    ))}
+                    {/* Completed Tasks */}
+                    {completedTasks.length > 0 && (
+                        <div className="space-y-3">
+                            <h2 className="text-sm font-medium text-muted-foreground">
+                                Completed ({completedTasks.length})
+                            </h2>
+                            {completedTasks.map((task) => (
+                                <TaskCard key={task.id} task={task} />
+                            ))}
+                        </div>
+                    )}
+                </>
+            ) : (
+                <div className="text-center py-16">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+                        <ClipboardList className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-lg font-medium mb-2">No tasks yet</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                        Start organizing your life by adding your first task.
+                    </p>
+                    <Button asChild>
+                        <Link href="/tasks/new">
+                            <Plus className="mr-2 h-4 w-4" />
+                            Create Your First Task
+                        </Link>
+                    </Button>
                 </div>
             )}
         </div>
