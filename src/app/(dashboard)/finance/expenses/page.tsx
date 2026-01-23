@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,9 @@ import {
     ArrowDownRight,
     ChevronLeft,
     Receipt,
+    Loader2,
 } from "lucide-react";
+import { getTransactions, type Transaction } from "@/lib/db";
 
 interface Expense {
     id: string;
@@ -26,7 +28,42 @@ interface Expense {
 
 export default function ExpensesPage() {
     const [searchQuery, setSearchQuery] = useState("");
-    const [expenses] = useState<Expense[]>([]);
+    const [expenses, setExpenses] = useState<Expense[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    // Fetch expenses on mount
+    useEffect(() => {
+        async function loadExpenses() {
+            try {
+                // Get current month's date range
+                const now = new Date();
+                const startDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+                const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+                const endDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${lastDay}`;
+
+                const transactions = await getTransactions(100, startDate, endDate);
+
+                // Filter only expenses and map to UI format
+                const expenseList = transactions
+                    .filter((t) => t.type === "expense")
+                    .map((t) => ({
+                        id: t.id,
+                        description: t.description,
+                        amount: Number(t.amount),
+                        date: t.date,
+                        category: t.category_name || "Uncategorized",
+                        categoryColor: t.category_color || "#6b7280",
+                    }));
+
+                setExpenses(expenseList);
+            } catch (error) {
+                console.error("Failed to load expenses:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        loadExpenses();
+    }, []);
 
     const filteredExpenses = expenses.filter((expense) =>
         expense.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -34,6 +71,14 @@ export default function ExpensesPage() {
     );
 
     const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">

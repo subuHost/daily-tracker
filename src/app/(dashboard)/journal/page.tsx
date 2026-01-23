@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -10,9 +10,11 @@ import {
     ChevronRight,
     Dumbbell,
     Save,
+    Loader2,
 } from "lucide-react";
 import { format, addDays, subDays } from "date-fns";
 import { toast } from "sonner";
+import { getDailyEntry, saveDailyEntry } from "@/lib/db";
 
 interface DailyEntry {
     date: string;
@@ -26,13 +28,52 @@ interface DailyEntry {
 export default function JournalPage() {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [entry, setEntry] = useState<DailyEntry>({
-        date: format(currentDate, "yyyy-MM-dd"),
+        date: format(new Date(), "yyyy-MM-dd"),
         notes: "",
         studied: "",
         gymDone: false,
         gymNotes: "",
         mood: 3,
     });
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
+
+    // Load entry when date changes
+    useEffect(() => {
+        async function loadEntry() {
+            setIsLoading(true);
+            try {
+                const dateStr = format(currentDate, "yyyy-MM-dd");
+                const dbEntry = await getDailyEntry(dateStr);
+
+                if (dbEntry) {
+                    setEntry({
+                        date: dbEntry.date,
+                        notes: dbEntry.notes || "",
+                        studied: dbEntry.studied || "",
+                        gymDone: dbEntry.gym_done || false,
+                        gymNotes: dbEntry.gym_notes || "",
+                        mood: dbEntry.mood || 3,
+                    });
+                } else {
+                    // Reset for new entry
+                    setEntry({
+                        date: dateStr,
+                        notes: "",
+                        studied: "",
+                        gymDone: false,
+                        gymNotes: "",
+                        mood: 3,
+                    });
+                }
+            } catch (error) {
+                console.error("Failed to load entry:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        loadEntry();
+    }, [currentDate]);
 
     const goToPreviousDay = () => {
         setCurrentDate(subDays(currentDate, 1));
@@ -45,9 +86,24 @@ export default function JournalPage() {
         }
     };
 
-    const handleSave = () => {
-        // TODO: Save to Supabase
-        toast.success("Journal entry saved!");
+    const handleSave = async () => {
+        setIsSaving(true);
+        try {
+            await saveDailyEntry({
+                date: format(currentDate, "yyyy-MM-dd"),
+                notes: entry.notes || null,
+                studied: entry.studied || null,
+                gym_done: entry.gymDone,
+                gym_notes: entry.gymNotes || null,
+                mood: entry.mood,
+            });
+            toast.success("Journal entry saved!");
+        } catch (error) {
+            console.error("Failed to save entry:", error);
+            toast.error("Failed to save entry. Please try again.");
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const moods = [
@@ -196,9 +252,13 @@ export default function JournalPage() {
             </Card>
 
             {/* Save Button */}
-            <Button onClick={handleSave} className="w-full" size="lg">
-                <Save className="mr-2 h-4 w-4" />
-                Save Entry
+            <Button onClick={handleSave} className="w-full" size="lg" disabled={isSaving || isLoading}>
+                {isSaving ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                    <Save className="mr-2 h-4 w-4" />
+                )}
+                {isSaving ? "Saving..." : "Save Entry"}
             </Button>
         </div>
     );

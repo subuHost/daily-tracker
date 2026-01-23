@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
@@ -12,6 +12,7 @@ import {
     TrendingDown,
     Target,
     Wallet,
+    Loader2,
 } from "lucide-react";
 import {
     BarChart,
@@ -27,52 +28,69 @@ import {
     Line,
 } from "recharts";
 import { toast } from "sonner";
-
-const monthlyExpenses = [
-    { month: "Aug", amount: 42000 },
-    { month: "Sep", amount: 45000 },
-    { month: "Oct", amount: 48000 },
-    { month: "Nov", amount: 52000 },
-    { month: "Dec", amount: 62000 },
-    { month: "Jan", amount: 47500 },
-];
-
-const categoryBreakdown = [
-    { name: "Food", value: 12000, color: "#ef4444" },
-    { name: "Transport", value: 5000, color: "#f97316" },
-    { name: "Entertainment", value: 4000, color: "#eab308" },
-    { name: "Shopping", value: 8000, color: "#22c55e" },
-    { name: "Bills", value: 15000, color: "#3b82f6" },
-    { name: "Other", value: 3500, color: "#8b5cf6" },
-];
-
-const habitData = [
-    { name: "Gym", completed: 18, total: 21 },
-    { name: "Reading", completed: 15, total: 21 },
-    { name: "Meditation", completed: 10, total: 21 },
-    { name: "Water", completed: 19, total: 21 },
-];
-
-const investmentPerformance = [
-    { month: "Aug", value: 320000 },
-    { month: "Sep", value: 335000 },
-    { month: "Oct", value: 328000 },
-    { month: "Nov", value: 345000 },
-    { month: "Dec", value: 355000 },
-    { month: "Jan", value: 365000 },
-];
+import { getMonthlyStats, getCategoryBreakdown, getHabits } from "@/lib/db";
 
 export default function ReportsPage() {
     const [period, setPeriod] = useState<"month" | "year">("month");
+    const [isLoading, setIsLoading] = useState(true);
+    const [totalIncome, setTotalIncome] = useState(0);
+    const [totalExpenses, setTotalExpenses] = useState(0);
+    const [categoryBreakdown, setCategoryBreakdown] = useState<{ name: string; value: number; color: string }[]>([]);
+    const [habitData, setHabitData] = useState<{ name: string; completed: number; total: number }[]>([]);
+
+    useEffect(() => {
+        async function loadReportData() {
+            try {
+                const now = new Date();
+                const month = now.getMonth() + 1;
+                const year = now.getFullYear();
+
+                // Fetch monthly stats
+                const stats = await getMonthlyStats(month, year);
+                setTotalIncome(stats.totalIncome);
+                setTotalExpenses(stats.totalExpenses);
+
+                // Fetch category breakdown
+                const categories = await getCategoryBreakdown(month, year);
+                setCategoryBreakdown(categories);
+
+                // Fetch habit data
+                const habits = await getHabits();
+                const habitStats = habits.map(h => ({
+                    name: h.name,
+                    completed: h.completedDays,
+                    total: Math.min(h.totalDays, 30), // Cap at 30 days for display
+                }));
+                setHabitData(habitStats.slice(0, 4)); // Top 4 habits
+            } catch (error) {
+                console.error("Failed to load report data:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        loadReportData();
+    }, []);
 
     const handleExport = (type: string) => {
         toast.success(`Exporting ${type} report as CSV...`);
     };
 
-    const totalExpenses = categoryBreakdown.reduce((sum, cat) => sum + cat.value, 0);
-    const totalIncome = 75000;
     const savings = totalIncome - totalExpenses;
-    const savingsRate = Math.round((savings / totalIncome) * 100);
+    const savingsRate = totalIncome > 0 ? Math.round((savings / totalIncome) * 100) : 0;
+    const hasData = totalIncome > 0 || totalExpenses > 0;
+
+    // Generate monthly expense trend (placeholder - would need historical data)
+    const monthlyExpenses = hasData ? [
+        { month: "This Month", amount: totalExpenses },
+    ] : [];
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -293,41 +311,11 @@ export default function ReportsPage() {
                         </Button>
                     </CardHeader>
                     <CardContent>
-                        <div className="h-[200px]">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={investmentPerformance}>
-                                    <XAxis dataKey="month" axisLine={false} tickLine={false} />
-                                    <YAxis
-                                        axisLine={false}
-                                        tickLine={false}
-                                        tickFormatter={(v) => `₹${v / 1000}k`}
-                                    />
-                                    <Tooltip
-                                        formatter={(v: number) => formatCurrency(v)}
-                                        contentStyle={{
-                                            backgroundColor: "hsl(var(--card))",
-                                            border: "1px solid hsl(var(--border))",
-                                            borderRadius: "8px",
-                                        }}
-                                    />
-                                    <Line
-                                        type="monotone"
-                                        dataKey="value"
-                                        stroke="#22c55e"
-                                        strokeWidth={2}
-                                        dot={false}
-                                    />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </div>
-                        <div className="flex justify-center gap-4 mt-4 text-sm">
-                            <div className="text-center">
-                                <p className="text-muted-foreground">Current</p>
-                                <p className="font-bold text-green-500">{formatCurrency(365000)}</p>
-                            </div>
-                            <div className="text-center">
-                                <p className="text-muted-foreground">Gain</p>
-                                <p className="font-bold text-green-500">+{formatCurrency(45000)}</p>
+                        <div className="h-[200px] flex items-center justify-center">
+                            <div className="text-center text-muted-foreground">
+                                <Wallet className="h-12 w-12 mx-auto mb-2 opacity-20" />
+                                <p>No investment data yet</p>
+                                <p className="text-xs mt-1">Add investments to track portfolio</p>
                             </div>
                         </div>
                     </CardContent>

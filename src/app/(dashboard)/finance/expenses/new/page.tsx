@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
@@ -21,6 +21,12 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import {
+    createTransaction,
+    getCategories,
+    initializeDefaultCategories,
+    type Category,
+} from "@/lib/db";
 
 const expenseSchema = z.object({
     description: z.string().min(1, "Description is required"),
@@ -32,20 +38,11 @@ const expenseSchema = z.object({
 
 type ExpenseForm = z.infer<typeof expenseSchema>;
 
-const categories = [
-    { id: "food", name: "Food & Dining", color: "#ef4444" },
-    { id: "transport", name: "Transport", color: "#f97316" },
-    { id: "entertainment", name: "Entertainment", color: "#eab308" },
-    { id: "shopping", name: "Shopping", color: "#22c55e" },
-    { id: "bills", name: "Bills & Utilities", color: "#3b82f6" },
-    { id: "health", name: "Health", color: "#8b5cf6" },
-    { id: "education", name: "Education", color: "#ec4899" },
-    { id: "other", name: "Other", color: "#6b7280" },
-];
-
 export default function NewExpensePage() {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
+    const [categories, setCategories] = useState<Category[]>([]);
+    const [loadingCategories, setLoadingCategories] = useState(true);
 
     const {
         register,
@@ -59,15 +56,41 @@ export default function NewExpensePage() {
         },
     });
 
+    // Load categories on mount
+    useEffect(() => {
+        async function loadCategories() {
+            try {
+                // Initialize default categories if needed
+                await initializeDefaultCategories();
+                // Fetch categories
+                const cats = await getCategories("expense");
+                setCategories(cats);
+            } catch (error) {
+                console.error("Failed to load categories:", error);
+                toast.error("Failed to load categories");
+            } finally {
+                setLoadingCategories(false);
+            }
+        }
+        loadCategories();
+    }, []);
+
     const onSubmit = async (data: ExpenseForm) => {
         setIsLoading(true);
         try {
-            // TODO: Save to Supabase
-            console.log("Expense data:", data);
+            await createTransaction({
+                type: "expense",
+                amount: parseFloat(data.amount),
+                description: data.description,
+                category_id: data.category,
+                date: data.date,
+                note: data.note || null,
+            });
             toast.success("Expense added successfully!");
             router.push("/finance/expenses");
         } catch (error) {
-            toast.error("Failed to add expense");
+            console.error("Failed to add expense:", error);
+            toast.error("Failed to add expense. Please try again.");
         } finally {
             setIsLoading(false);
         }

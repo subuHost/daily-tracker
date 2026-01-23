@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import {
     PiggyBank,
     Receipt,
     Plus,
+    Loader2,
 } from "lucide-react";
 import {
     PieChart,
@@ -24,6 +26,7 @@ import {
     YAxis,
     Tooltip,
 } from "recharts";
+import { getMonthlyStats, getCategoryBreakdown } from "@/lib/db";
 
 const financeCards = [
     {
@@ -77,15 +80,48 @@ const financeCards = [
 ];
 
 export default function FinancePage() {
-    // Empty state - no data initially
-    const hasData = false;
-    const totalIncome = 0;
-    const totalExpenses = 0;
+    const [isLoading, setIsLoading] = useState(true);
+    const [totalIncome, setTotalIncome] = useState(0);
+    const [totalExpenses, setTotalExpenses] = useState(0);
+    const [categoryData, setCategoryData] = useState<{ name: string; value: number; color: string }[]>([]);
+
+    useEffect(() => {
+        async function loadFinanceData() {
+            try {
+                const now = new Date();
+                const month = now.getMonth() + 1;
+                const year = now.getFullYear();
+
+                // Fetch monthly stats
+                const stats = await getMonthlyStats(month, year);
+                setTotalIncome(stats.totalIncome);
+                setTotalExpenses(stats.totalExpenses);
+
+                // Fetch category breakdown for pie chart
+                const categories = await getCategoryBreakdown(month, year);
+                setCategoryData(categories);
+            } catch (error) {
+                console.error("Failed to load finance data:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        loadFinanceData();
+    }, []);
+
+    const hasData = totalIncome > 0 || totalExpenses > 0;
     const savings = totalIncome - totalExpenses;
 
-    // Empty chart data
+    // Empty chart data for line chart (will be populated later with historical data)
     const monthlyData: { month: string; income: number; expenses: number }[] = [];
-    const categoryData: { name: string; value: number; color: string }[] = [];
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">

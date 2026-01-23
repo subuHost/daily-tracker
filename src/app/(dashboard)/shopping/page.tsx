@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,11 @@ import {
     ExternalLink,
     Star,
     ShoppingBag,
+    Loader2,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { getShoppingItems, toggleShoppingItemPurchased } from "@/lib/db";
+import { toast } from "sonner";
 
 interface ShoppingItem {
     id: string;
@@ -29,6 +32,31 @@ interface ShoppingItem {
 export default function ShoppingPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [items, setItems] = useState<ShoppingItem[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    // Fetch items on mount
+    useEffect(() => {
+        async function loadItems() {
+            try {
+                const dbItems = await getShoppingItems();
+                const formattedItems = dbItems.map((i) => ({
+                    id: i.id,
+                    name: i.name,
+                    price: Number(i.price) || 0,
+                    priority: i.priority,
+                    link: i.link || undefined,
+                    purchased: i.purchased,
+                    comments: i.comments || undefined,
+                }));
+                setItems(formattedItems);
+            } catch (error) {
+                console.error("Failed to load items:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        loadItems();
+    }, []);
 
     const filteredItems = items.filter((item) =>
         item.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -37,10 +65,17 @@ export default function ShoppingPage() {
     const wishlist = filteredItems.filter((i) => !i.purchased);
     const purchased = filteredItems.filter((i) => i.purchased);
 
-    const togglePurchased = (id: string) => {
-        setItems(items.map((i) =>
-            i.id === id ? { ...i, purchased: !i.purchased } : i
-        ));
+    const togglePurchased = async (id: string) => {
+        try {
+            await toggleShoppingItemPurchased(id);
+            setItems(items.map((i) =>
+                i.id === id ? { ...i, purchased: !i.purchased } : i
+            ));
+            toast.success("Item updated!");
+        } catch (error) {
+            console.error("Failed to update item:", error);
+            toast.error("Failed to update item");
+        }
     };
 
     const totalWishlist = wishlist.reduce((sum, item) => sum + item.price, 0);
@@ -52,6 +87,14 @@ export default function ShoppingPage() {
             default: return 1;
         }
     };
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">

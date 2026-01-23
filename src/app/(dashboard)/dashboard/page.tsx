@@ -1,3 +1,6 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import { BudgetWidget } from "@/components/dashboard/budget-widget";
 import { TasksWidget } from "@/components/dashboard/tasks-widget";
 import { ExpensesWidget } from "@/components/dashboard/expenses-widget";
@@ -5,9 +8,65 @@ import { HabitsWidget } from "@/components/dashboard/habits-widget";
 import { NetWorthWidget } from "@/components/dashboard/net-worth-widget";
 import { QuickLinksWidget } from "@/components/dashboard/quick-links-widget";
 import { getGreeting } from "@/lib/utils";
+import { Loader2 } from "lucide-react";
+import { getTransactions, getCurrentBudget, getMonthlySpent } from "@/lib/db";
+
+interface Transaction {
+    id: string;
+    description: string;
+    amount: number;
+    date: string;
+    type: "expense" | "income";
+    category: string;
+}
 
 export default function DashboardPage() {
     const greeting = getGreeting();
+    const [isLoading, setIsLoading] = useState(true);
+    const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const [budget, setBudget] = useState<number | undefined>(undefined);
+    const [spent, setSpent] = useState<number>(0);
+
+    useEffect(() => {
+        async function loadDashboardData() {
+            try {
+                // Fetch recent transactions
+                const txns = await getTransactions(10);
+                const formattedTxns = txns.map((t) => ({
+                    id: t.id,
+                    description: t.description,
+                    amount: Number(t.amount),
+                    date: t.date,
+                    type: t.type as "expense" | "income",
+                    category: t.category_name || "Uncategorized",
+                }));
+                setTransactions(formattedTxns);
+
+                // Fetch budget info
+                const currentBudget = await getCurrentBudget();
+                if (currentBudget) {
+                    setBudget(Number(currentBudget.amount));
+                }
+
+                // Fetch monthly spent
+                const monthlySpent = await getMonthlySpent();
+                setSpent(monthlySpent);
+            } catch (error) {
+                console.error("Failed to load dashboard data:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        loadDashboardData();
+    }, []);
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -27,12 +86,12 @@ export default function DashboardPage() {
             {/* Widgets Grid */}
             <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                 {/* Row 1 */}
-                <BudgetWidget />
+                <BudgetWidget budget={budget} spent={spent} />
                 <TasksWidget />
                 <NetWorthWidget />
 
                 {/* Row 2 */}
-                <ExpensesWidget />
+                <ExpensesWidget transactions={transactions} />
                 <HabitsWidget />
                 <QuickLinksWidget />
             </div>

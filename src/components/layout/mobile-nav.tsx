@@ -13,6 +13,7 @@ import {
     ShoppingBag,
     Users,
     Image,
+    BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -35,6 +36,7 @@ const moreNavigation = [
     { name: "Shopping", href: "/shopping", icon: ShoppingBag },
     { name: "Contacts", href: "/contacts", icon: Users },
     { name: "Gallery", href: "/gallery", icon: Image },
+    { name: "Reports", href: "/reports", icon: BarChart3 },
 ];
 
 export function MobileNav() {
@@ -70,8 +72,9 @@ export function MobileNav() {
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <button
+                            type="button"
                             className={cn(
-                                "flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-colors min-w-[60px]",
+                                "flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-colors min-w-[60px] outline-none",
                                 isMoreActive
                                     ? "text-primary"
                                     : "text-muted-foreground"
@@ -81,7 +84,12 @@ export function MobileNav() {
                             <span className="text-[10px] font-medium">More</span>
                         </button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48 mb-2">
+                    <DropdownMenuContent
+                        align="end"
+                        side="top"
+                        sideOffset={16}
+                        className="w-48 z-[100]"
+                    >
                         {moreNavigation.map((item) => {
                             const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
                             return (
@@ -89,7 +97,7 @@ export function MobileNav() {
                                     <Link
                                         href={item.href}
                                         className={cn(
-                                            "flex items-center gap-3 w-full",
+                                            "flex items-center gap-3 w-full cursor-pointer",
                                             isActive && "text-primary font-medium"
                                         )}
                                     >

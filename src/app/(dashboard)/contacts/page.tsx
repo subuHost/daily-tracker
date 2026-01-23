@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,10 @@ import {
     Mail,
     Cake,
     Users,
+    Loader2,
 } from "lucide-react";
 import { formatDate, getInitials } from "@/lib/utils";
+import { getContacts, type Contact as DBContact } from "@/lib/db";
 
 interface Contact {
     id: string;
@@ -27,7 +29,31 @@ interface Contact {
 
 export default function ContactsPage() {
     const [searchQuery, setSearchQuery] = useState("");
-    const [contacts] = useState<Contact[]>([]);
+    const [contacts, setContacts] = useState<Contact[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    // Fetch contacts on mount
+    useEffect(() => {
+        async function loadContacts() {
+            try {
+                const dbContacts = await getContacts();
+                const formattedContacts = dbContacts.map((c) => ({
+                    id: c.id,
+                    name: c.name,
+                    phone: c.phone || undefined,
+                    email: c.email || undefined,
+                    birthday: c.birthday || undefined,
+                    notes: c.notes || undefined,
+                }));
+                setContacts(formattedContacts);
+            } catch (error) {
+                console.error("Failed to load contacts:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        loadContacts();
+    }, []);
 
     const filteredContacts = contacts.filter((contact) =>
         contact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -44,6 +70,14 @@ export default function ContactsPage() {
     }, {} as Record<string, Contact[]>);
 
     const sortedLetters = Object.keys(groupedContacts).sort();
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">

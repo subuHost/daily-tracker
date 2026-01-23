@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,11 @@ import {
     Calendar,
     Flag,
     ClipboardList,
+    Loader2,
 } from "lucide-react";
 import { formatShortDate } from "@/lib/utils";
+import { getTasks, toggleTaskComplete, type Task as DBTask } from "@/lib/db";
+import { toast } from "sonner";
 
 interface Task {
     id: string;
@@ -29,6 +32,31 @@ interface Task {
 export default function TasksPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [tasks, setTasks] = useState<Task[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    // Fetch tasks on mount
+    useEffect(() => {
+        async function loadTasks() {
+            try {
+                const dbTasks = await getTasks();
+                const formattedTasks = dbTasks.map((t) => ({
+                    id: t.id,
+                    title: t.title,
+                    description: t.description || undefined,
+                    completed: t.completed,
+                    dueDate: t.due_date || undefined,
+                    priority: t.priority,
+                    project: undefined,
+                }));
+                setTasks(formattedTasks);
+            } catch (error) {
+                console.error("Failed to load tasks:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        loadTasks();
+    }, []);
 
     const filteredTasks = tasks.filter((task) =>
         task.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -37,10 +65,16 @@ export default function TasksPage() {
     const incompleteTasks = filteredTasks.filter((t) => !t.completed);
     const completedTasks = filteredTasks.filter((t) => t.completed);
 
-    const toggleTask = (id: string) => {
-        setTasks(tasks.map((t) =>
-            t.id === id ? { ...t, completed: !t.completed } : t
-        ));
+    const toggleTask = async (id: string) => {
+        try {
+            await toggleTaskComplete(id);
+            setTasks(tasks.map((t) =>
+                t.id === id ? { ...t, completed: !t.completed } : t
+            ));
+        } catch (error) {
+            console.error("Failed to toggle task:", error);
+            toast.error("Failed to update task");
+        }
     };
 
     const getPriorityColor = (priority: string) => {
@@ -92,6 +126,14 @@ export default function TasksPage() {
             </CardContent>
         </Card>
     );
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">

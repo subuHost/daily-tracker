@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,10 @@ import {
     X,
     TrendingUp,
     Target,
+    Loader2,
 } from "lucide-react";
+import { getHabits, toggleHabitToday, type HabitWithStats } from "@/lib/db";
+import { toast } from "sonner";
 
 interface Habit {
     id: string;
@@ -26,17 +29,54 @@ interface Habit {
 
 export default function HabitsPage() {
     const [habits, setHabits] = useState<Habit[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-    const toggleHabit = (id: string) => {
-        setHabits(habits.map((h) =>
-            h.id === id ? { ...h, completedToday: !h.completedToday } : h
-        ));
+    // Fetch habits on mount
+    useEffect(() => {
+        async function loadHabits() {
+            try {
+                const dbHabits = await getHabits();
+                const formattedHabits = dbHabits.map((h) => ({
+                    id: h.id,
+                    name: h.name,
+                    icon: h.icon || "✨",
+                    streak: h.streak,
+                    completedToday: h.completedToday,
+                    completedDays: h.completedDays,
+                    totalDays: h.totalDays,
+                }));
+                setHabits(formattedHabits);
+            } catch (error) {
+                console.error("Failed to load habits:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        loadHabits();
+    }, []);
+
+    const toggleHabit = async (id: string) => {
+        try {
+            const newState = await toggleHabitToday(id);
+            setHabits(habits.map((h) =>
+                h.id === id ? {
+                    ...h,
+                    completedToday: newState,
+                    streak: newState ? h.streak + 1 : Math.max(0, h.streak - 1),
+                    completedDays: newState ? h.completedDays + 1 : h.completedDays - 1,
+                } : h
+            ));
+            toast.success(newState ? "Habit marked complete!" : "Habit unmarked");
+        } catch (error) {
+            console.error("Failed to toggle habit:", error);
+            toast.error("Failed to update habit");
+        }
     };
 
     const completedToday = habits.filter((h) => h.completedToday).length;
     const totalHabits = habits.length;
 
-    // Generate calendar heatmap data (empty for new users)
+    // Generate calendar heatmap data
     const generateHeatmapData = () => {
         const data = [];
         const today = new Date();
@@ -52,6 +92,14 @@ export default function HabitsPage() {
     };
 
     const heatmapData = generateHeatmapData();
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
