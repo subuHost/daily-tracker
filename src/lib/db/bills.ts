@@ -10,6 +10,7 @@ export interface Bill {
     is_paid: boolean;
     last_paid_date: string | null;
     note: string | null;
+    image_url: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -20,6 +21,7 @@ export interface BillInput {
     due_date: number;
     recurring?: "monthly" | "yearly" | "weekly" | null;
     note?: string | null;
+    image_url?: string | null;
 }
 
 // Fetch user's bills
@@ -55,6 +57,7 @@ export async function createBill(input: BillInput): Promise<Bill> {
             due_date: input.due_date,
             recurring: input.recurring || "monthly",
             note: input.note || null,
+            image_url: input.image_url || null,
             is_paid: false,
         })
         .select()

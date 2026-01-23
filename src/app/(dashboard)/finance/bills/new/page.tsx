@@ -20,7 +20,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { createBill } from "@/lib/db";
+import { createBill, uploadGalleryFile } from "@/lib/db";
+import { Upload, X } from "lucide-react";
 
 const billSchema = z.object({
     name: z.string().min(1, "Bill name is required"),
@@ -35,6 +36,7 @@ type BillForm = z.infer<typeof billSchema>;
 export default function NewBillPage() {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
+    const [file, setFile] = useState<File | null>(null);
 
     const {
         register,
@@ -51,18 +53,26 @@ export default function NewBillPage() {
     const onSubmit = async (data: BillForm) => {
         setIsLoading(true);
         try {
+            let imageUrl = null;
+            if (file) {
+                // Upload image first
+                const galleryItem = await uploadGalleryFile(file, `Bill: ${data.name}`, ["bill", "receipt"]);
+                imageUrl = galleryItem.file_url;
+            }
+
             await createBill({
                 name: data.name,
                 amount: parseFloat(data.amount),
                 due_date: parseInt(data.dueDate),
                 recurring: data.recurring as "monthly" | "yearly" | "weekly",
                 note: data.note || null,
+                image_url: imageUrl,
             });
             toast.success("Bill added successfully!");
             router.push("/finance/bills");
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to add bill:", error);
-            toast.error("Failed to add bill. Please try again.");
+            toast.error(`Failed to add bill: ${error.message || "Unknown error"}`);
         } finally {
             setIsLoading(false);
         }
@@ -142,6 +152,43 @@ export default function NewBillPage() {
                                     <SelectItem value="weekly">Weekly</SelectItem>
                                 </SelectContent>
                             </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Receipt / Attachment (Optional)</Label>
+                            {!file ? (
+                                <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center hover:border-primary/50 hover:bg-accent/50 transition-colors">
+                                    <Input
+                                        type="file"
+                                        accept="image/*,.pdf"
+                                        className="hidden"
+                                        id="bill-file"
+                                        onChange={(e) => {
+                                            if (e.target.files?.[0]) {
+                                                setFile(e.target.files[0]);
+                                            }
+                                        }}
+                                    />
+                                    <Label htmlFor="bill-file" className="cursor-pointer block">
+                                        <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                                        <span className="text-sm text-muted-foreground">
+                                            Click to upload receipt
+                                        </span>
+                                    </Label>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-2 p-2 border rounded-md">
+                                    <span className="text-sm truncate flex-1">{file.name}</span>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setFile(null)}
+                                    >
+                                        <X className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            )}
                         </div>
 
                         <div className="space-y-2">

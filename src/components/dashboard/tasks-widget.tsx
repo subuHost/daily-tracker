@@ -93,12 +93,20 @@ export function TasksWidget({ tasks = [], bills = [] }: TasksWidgetProps) {
                         <p className="text-sm text-muted-foreground mb-3">
                             No tasks or bills yet
                         </p>
-                        <Button variant="outline" size="sm" asChild>
-                            <Link href="/tasks/new">
-                                <Plus className="h-4 w-4 mr-1" />
-                                Add Task
-                            </Link>
-                        </Button>
+                        <div className="flex justify-center gap-2">
+                            <Button variant="outline" size="sm" asChild>
+                                <Link href="/tasks/new">
+                                    <Plus className="h-4 w-4 mr-1" />
+                                    Add Task
+                                </Link>
+                            </Button>
+                            <Button variant="outline" size="sm" asChild>
+                                <Link href="/finance/bills/new">
+                                    <Plus className="h-4 w-4 mr-1" />
+                                    Add Bill
+                                </Link>
+                            </Button>
+                        </div>
                     </div>
                 )}
             </CardContent>

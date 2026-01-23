@@ -10,3 +10,4 @@ export * from "./contacts";
 export * from "./debts";
 export * from "./bills";
 export * from "./investments";
+export * from "./gallery";

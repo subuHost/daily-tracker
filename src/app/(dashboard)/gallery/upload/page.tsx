@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { uploadGalleryFile } from "@/lib/db";
 
 export default function GalleryUploadPage() {
     const router = useRouter();
@@ -69,13 +70,20 @@ export default function GalleryUploadPage() {
 
         setUploading(true);
 
-        // TODO: Implement actual Supabase storage upload
-        // For now, simulate upload
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        try {
+            // Upload files one by one
+            for (const file of files) {
+                await uploadGalleryFile(file, description, tags);
+            }
 
-        toast.success(`${files.length} file(s) uploaded successfully`);
-        setUploading(false);
-        router.push("/gallery");
+            toast.success(`${files.length} file(s) uploaded successfully`);
+            router.push("/gallery");
+        } catch (error: any) {
+            console.error("Upload failed:", error);
+            toast.error(`Failed to upload files: ${error.message || "Please check storage policies"}`);
+        } finally {
+            setUploading(false);
+        }
     };
 
     const getFileIcon = (file: File) => {
