@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Plus, Receipt, CheckSquare, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,12 +20,18 @@ const quickActions = [
 
 export function QuickAddButton() {
     const [open, setOpen] = useState(false);
+    const router = useRouter();
+
+    const handleAction = (href: string) => {
+        setOpen(false);
+        router.push(href);
+    };
 
     return (
         <>
             <Button
                 onClick={() => setOpen(true)}
-                className="fixed bottom-20 right-4 md:bottom-6 md:right-6 h-14 w-14 rounded-full shadow-lg z-50 bg-gradient-to-br from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
+                className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 md:bottom-8 md:right-8 h-14 w-14 rounded-full shadow-lg z-[60] bg-gradient-to-br from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 ring-2 ring-background"
                 size="icon"
             >
                 <Plus className="h-6 w-6" />
@@ -40,10 +47,7 @@ export function QuickAddButton() {
                         {quickActions.map((action) => (
                             <button
                                 key={action.name}
-                                onClick={() => {
-                                    setOpen(false);
-                                    window.location.href = action.href;
-                                }}
+                                onClick={() => handleAction(action.href)}
                                 className="flex flex-col items-center gap-2 p-4 rounded-xl border bg-card hover:bg-accent transition-colors"
                             >
                                 <div className={cn("p-3 rounded-full bg-muted", action.color)}>

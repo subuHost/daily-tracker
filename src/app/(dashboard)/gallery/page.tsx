@@ -18,6 +18,18 @@ import {
 import { getGalleryItems, type GalleryItem } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
 import Image from "next/image";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
+import { deleteGalleryItem, updateGalleryItem } from "@/lib/db";
+import { Trash2, Edit2, Save as SaveIcon, Tag } from "lucide-react";
 
 export default function GalleryPage() {
     const [searchQuery, setSearchQuery] = useState("");
@@ -25,6 +37,69 @@ export default function GalleryPage() {
     const [items, setItems] = useState<GalleryItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedTag, setSelectedTag] = useState<string | null>(null);
+
+    // Action State
+    const [selectedItem, setSelectedItem] = useState<GalleryItem | null>(null);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editForm, setEditForm] = useState({ description: "", tags: "" });
+    const [isActionLoading, setIsActionLoading] = useState(false);
+
+    useEffect(() => {
+        if (selectedItem) {
+            setEditForm({
+                description: selectedItem.description || "",
+                tags: selectedItem.tags ? selectedItem.tags.join(", ") : "",
+            });
+            setIsEditing(false);
+        }
+    }, [selectedItem]);
+
+    const handleDelete = async () => {
+        if (!selectedItem) return;
+        if (!confirm("Are you sure you want to delete this item?")) return;
+
+        setIsActionLoading(true);
+        try {
+            await deleteGalleryItem(selectedItem.id, selectedItem.file_url);
+            setItems((prev) => prev.filter((i) => i.id !== selectedItem.id));
+            setSelectedItem(null);
+            toast.success("Item deleted");
+        } catch (error: any) {
+            console.error("Delete failed:", error);
+            toast.error("Failed to delete item");
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
+    const handleUpdate = async () => {
+        if (!selectedItem) return;
+
+        setIsActionLoading(true);
+        try {
+            const tags = editForm.tags
+                .split(",")
+                .map((t) => t.trim())
+                .filter((t) => t.length > 0);
+
+            const updated = await updateGalleryItem(selectedItem.id, {
+                description: editForm.description,
+                tags: tags,
+            });
+
+            setItems((prev) =>
+                prev.map((i) => (i.id === updated.id ? updated : i))
+            );
+            setSelectedItem(updated);
+            setIsEditing(false);
+            toast.success("Item updated");
+        } catch (error: any) {
+            console.error("Update failed:", error);
+            toast.error("Failed to update item");
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
 
     useEffect(() => {
         async function loadItems() {
@@ -141,7 +216,11 @@ export default function GalleryPage() {
                                 /\.(jpg|jpeg|png|gif|webp)$/i.test(item.file_url));
 
                             return (
-                                <Card key={item.id} className="overflow-hidden group cursor-pointer hover:ring-2 hover:ring-primary">
+                                <Card
+                                    key={item.id}
+                                    className="overflow-hidden group cursor-pointer hover:ring-2 hover:ring-primary"
+                                    onClick={() => setSelectedItem(item)}
+                                >
                                     <div className="aspect-square bg-muted flex items-center justify-center relative">
                                         {isImage ? (
                                             <div className="relative w-full h-full">
@@ -232,6 +311,113 @@ export default function GalleryPage() {
                     </Button>
                 </div>
             )}
-        </div>
+
+
+            {/* View/Edit Dialog */}
+            <Dialog open={!!selectedItem} onOpenChange={(open) => !open && setSelectedItem(null)}>
+                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>{isEditing ? "Edit Item" : "View Item"}</DialogTitle>
+                    </DialogHeader>
+
+                    {selectedItem && (
+                        <div className="space-y-6">
+                            <div className="relative aspect-video w-full bg-muted rounded-lg overflow-hidden flex items-center justify-center">
+                                {selectedItem.file_type?.startsWith("image") || selectedItem.tags?.includes("image") ? (
+                                    <Image
+                                        src={selectedItem.file_url}
+                                        alt={selectedItem.description || "Gallery Item"}
+                                        fill
+                                        className="object-contain"
+                                        unoptimized
+                                    />
+                                ) : (
+                                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                                        <FileText className="h-16 w-16" />
+                                        <a href={selectedItem.file_url} target="_blank" rel="noreferrer" className="hover:underline">
+                                            Download File
+                                        </a>
+                                    </div>
+                                )}
+                            </div>
+
+                            {isEditing ? (
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <Label>Description</Label>
+                                        <Textarea
+                                            value={editForm.description}
+                                            onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
+                                            placeholder="Add a description..."
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Tags (comma separated)</Label>
+                                        <Input
+                                            value={editForm.tags}
+                                            onChange={(e) => setEditForm(prev => ({ ...prev, tags: e.target.value }))}
+                                            placeholder="e.g. receipt, work, travel"
+                                        />
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div>
+                                        <h3 className="font-semibold mb-1">Description</h3>
+                                        <p className="text-sm text-muted-foreground">
+                                            {selectedItem.description || "No description provided."}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <h3 className="font-semibold mb-2 flex items-center gap-2">
+                                            <Tag className="h-4 w-4" /> Tags
+                                        </h3>
+                                        <div className="flex flex-wrap gap-2">
+                                            {selectedItem.tags && selectedItem.tags.length > 0 ? (
+                                                selectedItem.tags.map(tag => (
+                                                    <span key={tag} className="px-2 py-1 bg-secondary rounded-full text-xs font-medium">
+                                                        {tag}
+                                                    </span>
+                                                ))
+                                            ) : (
+                                                <span className="text-sm text-muted-foreground italic">No tags</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="text-xs text-muted-foreground pt-4 border-t">
+                                        Uploaded on {formatDate(selectedItem.upload_date)}
+                                    </div>
+                                </div>
+                            )}
+
+                            <DialogFooter className="gap-2 sm:gap-0">
+                                {isEditing ? (
+                                    <>
+                                        <Button variant="outline" onClick={() => setIsEditing(false)} disabled={isActionLoading}>
+                                            Cancel
+                                        </Button>
+                                        <Button onClick={handleUpdate} disabled={isActionLoading}>
+                                            {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                            Save Changes
+                                        </Button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Button variant="destructive" onClick={handleDelete} disabled={isActionLoading}>
+                                            {isActionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                                            Delete
+                                        </Button>
+                                        <Button variant="outline" onClick={() => setIsEditing(true)}>
+                                            <Edit2 className="mr-2 h-4 w-4" />
+                                            Edit Details
+                                        </Button>
+                                    </>
+                                )}
+                            </DialogFooter>
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
+        </div >
     );
 }
