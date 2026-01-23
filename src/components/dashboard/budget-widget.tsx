@@ -55,7 +55,7 @@ export function BudgetWidget({ budget, spent }: BudgetWidgetProps) {
                             No budget set yet
                         </p>
                         <Button variant="outline" size="sm" asChild>
-                            <Link href="/settings">
+                            <Link href="/finance/budget">
                                 <Plus className="h-4 w-4 mr-1" />
                                 Set Budget
                             </Link>

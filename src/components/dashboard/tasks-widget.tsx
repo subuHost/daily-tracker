@@ -94,7 +94,7 @@ export function TasksWidget({ tasks = [], bills = [] }: TasksWidgetProps) {
                             No tasks or bills yet
                         </p>
                         <Button variant="outline" size="sm" asChild>
-                            <Link href="/tasks">
+                            <Link href="/tasks/new">
                                 <Plus className="h-4 w-4 mr-1" />
                                 Add Task
                             </Link>
