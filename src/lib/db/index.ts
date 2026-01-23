@@ -7,3 +7,7 @@ export * from "./habits";
 export * from "./shopping";
 export * from "./journal";
 export * from "./contacts";
+export * from "./debts";
+export * from "./bills";
+export * from "./investments";
+export * from "./gallery";

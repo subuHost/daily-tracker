@@ -75,7 +75,7 @@ export function NetWorthWidget({
                             Track your finances
                         </p>
                         <Button variant="outline" size="sm" asChild>
-                            <Link href="/finance">
+                            <Link href="/finance/investments/new">
                                 <Plus className="h-4 w-4 mr-1" />
                                 Add Assets
                             </Link>

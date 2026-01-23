@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,33 +13,51 @@ import {
     Upload,
     FileText,
     X,
+    Loader2,
 } from "lucide-react";
-
-interface GalleryItem {
-    id: string;
-    url: string;
-    description: string;
-    tags: string[];
-    uploadDate: string;
-    type: "image" | "document";
-}
+import { getGalleryItems, type GalleryItem } from "@/lib/db";
+import { formatDate } from "@/lib/utils";
+import Image from "next/image";
 
 export default function GalleryPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-    const [items] = useState<GalleryItem[]>([]);
+    const [items, setItems] = useState<GalleryItem[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
+    useEffect(() => {
+        async function loadItems() {
+            try {
+                const data = await getGalleryItems();
+                setItems(data);
+            } catch (error) {
+                console.error("Failed to load gallery:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        loadItems();
+    }, []);
+
     // Get unique tags
-    const allTags = Array.from(new Set(items.flatMap((item) => item.tags)));
+    const allTags = Array.from(new Set(items.flatMap((item) => item.tags || [])));
 
     const filteredItems = items.filter((item) => {
         const matchesSearch =
-            item.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()));
-        const matchesTag = !selectedTag || item.tags.includes(selectedTag);
+            (item.description || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (item.tags || []).some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+        const matchesTag = !selectedTag || (item.tags || []).includes(selectedTag);
         return matchesSearch && matchesTag;
     });
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -120,21 +138,28 @@ export default function GalleryPage() {
                         {filteredItems.map((item) => (
                             <Card key={item.id} className="overflow-hidden group cursor-pointer hover:ring-2 hover:ring-primary">
                                 <div className="aspect-square bg-muted flex items-center justify-center relative">
-                                    {item.type === "image" ? (
-                                        <ImageIcon className="h-12 w-12 text-muted-foreground" />
+                                    {(item.file_type && item.file_type.startsWith("image")) ? (
+                                        <div className="relative w-full h-full">
+                                            <Image
+                                                src={item.file_url}
+                                                alt={item.description || "Gallery image"}
+                                                fill
+                                                className="object-cover"
+                                            />
+                                        </div>
                                     ) : (
                                         <FileText className="h-12 w-12 text-muted-foreground" />
                                     )}
                                     <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                         <p className="text-white text-sm text-center px-2">
-                                            {item.description}
+                                            {item.description || "No description"}
                                         </p>
                                     </div>
                                 </div>
                                 <CardContent className="p-2">
-                                    <p className="text-sm font-medium truncate">{item.description}</p>
+                                    <p className="text-sm font-medium truncate">{item.description || "Untitled"}</p>
                                     <div className="flex flex-wrap gap-1 mt-1">
-                                        {item.tags.slice(0, 2).map((tag) => (
+                                        {item.tags?.slice(0, 2).map((tag) => (
                                             <span
                                                 key={tag}
                                                 className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary"
@@ -153,19 +178,28 @@ export default function GalleryPage() {
                             <Card key={item.id} className="hover:bg-accent/50 transition-colors cursor-pointer">
                                 <CardContent className="p-4">
                                     <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                                            {item.type === "image" ? (
-                                                <ImageIcon className="h-6 w-6 text-muted-foreground" />
+                                        <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center shrink-0 overflow-hidden relative">
+                                            {(item.file_type && item.file_type.startsWith("image")) ? (
+                                                <Image
+                                                    src={item.file_url}
+                                                    alt={item.description || "Gallery image"}
+                                                    fill
+                                                    className="object-cover"
+                                                />
                                             ) : (
                                                 <FileText className="h-6 w-6 text-muted-foreground" />
                                             )}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="font-medium truncate">{item.description}</p>
+                                            <p className="font-medium truncate">{item.description || "Untitled"}</p>
                                             <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
-                                                <span>{item.uploadDate}</span>
-                                                <span>•</span>
-                                                <span className="truncate">{item.tags.join(", ")}</span>
+                                                <span>{formatDate(item.upload_date)}</span>
+                                                {item.tags && item.tags.length > 0 && (
+                                                    <>
+                                                        <span>•</span>
+                                                        <span className="truncate">{item.tags.join(", ")}</span>
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -181,7 +215,7 @@ export default function GalleryPage() {
                     </div>
                     <h3 className="text-lg font-medium mb-2">No files uploaded yet</h3>
                     <p className="text-sm text-muted-foreground mb-4">
-                        Upload your documents, receipts, and images to keep them organized.
+                        Upload your images to keep them organized.
                     </p>
                     <Button asChild>
                         <Link href="/gallery/upload">

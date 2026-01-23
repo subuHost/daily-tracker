@@ -9,6 +9,8 @@ export interface DailyEntry {
     gym_done: boolean;
     gym_notes: string | null;
     mood: number | null;
+    images: string[] | null;
+    voice_notes: string[] | null;
     created_at: string;
     updated_at: string;
 }
@@ -20,6 +22,8 @@ export interface DailyEntryInput {
     gym_done?: boolean;
     gym_notes?: string | null;
     mood?: number | null;
+    images?: string[] | null;
+    voice_notes?: string[] | null;
 }
 
 // Fetch entry for a specific date
@@ -61,6 +65,8 @@ export async function saveDailyEntry(input: DailyEntryInput): Promise<DailyEntry
                 gym_done: input.gym_done || false,
                 gym_notes: input.gym_notes || null,
                 mood: input.mood || null,
+                images: input.images || null,
+                voice_notes: input.voice_notes || null,
             },
             {
                 onConflict: "user_id,date",
