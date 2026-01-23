@@ -14,6 +14,7 @@ import {
     Cake,
     Users,
     Loader2,
+    Building2,
 } from "lucide-react";
 import { formatDate, getInitials } from "@/lib/utils";
 import { getContacts, type Contact as DBContact } from "@/lib/db";
@@ -21,6 +22,7 @@ import { getContacts, type Contact as DBContact } from "@/lib/db";
 interface Contact {
     id: string;
     name: string;
+    company?: string;
     phone?: string;
     email?: string;
     birthday?: string;
@@ -40,6 +42,7 @@ export default function ContactsPage() {
                 const formattedContacts = dbContacts.map((c) => ({
                     id: c.id,
                     name: c.name,
+                    company: c.company || undefined,
                     phone: c.phone || undefined,
                     email: c.email || undefined,
                     birthday: c.birthday || undefined,
@@ -57,6 +60,7 @@ export default function ContactsPage() {
 
     const filteredContacts = contacts.filter((contact) =>
         contact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        contact.company?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         contact.phone?.includes(searchQuery) ||
         contact.email?.toLowerCase().includes(searchQuery.toLowerCase())
     );
@@ -125,7 +129,15 @@ export default function ContactsPage() {
                                                     </AvatarFallback>
                                                 </Avatar>
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="font-medium text-sm sm:text-base">{contact.name}</p>
+                                                    <div className="flex flex-col">
+                                                        <p className="font-medium text-sm sm:text-base">{contact.name}</p>
+                                                        {contact.company && (
+                                                            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                                                                <Building2 className="h-3 w-3" />
+                                                                <span>{contact.company}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                     <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-1 sm:gap-3 mt-1 text-xs sm:text-sm text-muted-foreground">
                                                         {contact.phone && (
                                                             <span className="flex items-center gap-1">

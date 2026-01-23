@@ -3,6 +3,9 @@ import { createClient } from "@/lib/supabase/client";
 export interface Contact {
     id: string;
     user_id: string;
+    first_name: string | null;
+    last_name: string | null;
+    company: string | null;
     name: string;
     phone: string | null;
     email: string | null;
@@ -13,6 +16,9 @@ export interface Contact {
 }
 
 export interface ContactInput {
+    first_name?: string;
+    last_name?: string;
+    company?: string | null;
     name: string;
     phone?: string | null;
     email?: string | null;
@@ -48,6 +54,9 @@ export async function createContact(input: ContactInput): Promise<Contact> {
         .from("contacts")
         .insert({
             user_id: user.id,
+            first_name: input.first_name || null,
+            last_name: input.last_name || null,
+            company: input.company || null,
             name: input.name,
             phone: input.phone || null,
             email: input.email || null,
@@ -71,6 +80,9 @@ export async function updateContact(id: string, input: ContactInput): Promise<Co
     const { data, error } = await supabase
         .from("contacts")
         .update({
+            first_name: input.first_name || null,
+            last_name: input.last_name || null,
+            company: input.company || null,
             name: input.name,
             phone: input.phone || null,
             email: input.email || null,
