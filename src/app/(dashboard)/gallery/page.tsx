@@ -135,42 +135,49 @@ export default function GalleryPage() {
             {filteredItems.length > 0 ? (
                 viewMode === "grid" ? (
                     <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
-                        {filteredItems.map((item) => (
-                            <Card key={item.id} className="overflow-hidden group cursor-pointer hover:ring-2 hover:ring-primary">
-                                <div className="aspect-square bg-muted flex items-center justify-center relative">
-                                    {(item.file_type && item.file_type.startsWith("image")) ? (
-                                        <div className="relative w-full h-full">
-                                            <Image
-                                                src={item.file_url}
-                                                alt={item.description || "Gallery image"}
-                                                fill
-                                                className="object-cover"
-                                            />
+                        {filteredItems.map((item) => {
+                            const isImage = (item.file_type?.startsWith("image") ||
+                                item.tags?.includes("image") ||
+                                /\.(jpg|jpeg|png|gif|webp)$/i.test(item.file_url));
+
+                            return (
+                                <Card key={item.id} className="overflow-hidden group cursor-pointer hover:ring-2 hover:ring-primary">
+                                    <div className="aspect-square bg-muted flex items-center justify-center relative">
+                                        {isImage ? (
+                                            <div className="relative w-full h-full">
+                                                <Image
+                                                    src={item.file_url}
+                                                    alt={item.description || "Gallery image"}
+                                                    fill
+                                                    className="object-cover"
+                                                    unoptimized
+                                                />
+                                            </div>
+                                        ) : (
+                                            <FileText className="h-12 w-12 text-muted-foreground" />
+                                        )}
+                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                            <p className="text-white text-sm text-center px-2">
+                                                {item.description || "No description"}
+                                            </p>
                                         </div>
-                                    ) : (
-                                        <FileText className="h-12 w-12 text-muted-foreground" />
-                                    )}
-                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                        <p className="text-white text-sm text-center px-2">
-                                            {item.description || "No description"}
-                                        </p>
                                     </div>
-                                </div>
-                                <CardContent className="p-2">
-                                    <p className="text-sm font-medium truncate">{item.description || "Untitled"}</p>
-                                    <div className="flex flex-wrap gap-1 mt-1">
-                                        {item.tags?.slice(0, 2).map((tag) => (
-                                            <span
-                                                key={tag}
-                                                className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary"
-                                            >
-                                                {tag}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        ))}
+                                    <CardContent className="p-2">
+                                        <p className="text-sm font-medium truncate">{item.description || "Untitled"}</p>
+                                        <div className="flex flex-wrap gap-1 mt-1">
+                                            {item.tags?.slice(0, 2).map((tag) => (
+                                                <span
+                                                    key={tag}
+                                                    className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary"
+                                                >
+                                                    {tag}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            );
+                        })}
                     </div>
                 ) : (
                     <div className="space-y-2">

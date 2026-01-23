@@ -16,7 +16,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { createContact } from "@/lib/db";
 
 const contactSchema = z.object({
-    name: z.string().min(1, "Name is required"),
+    firstName: z.string().min(1, "First name is required"),
+    lastName: z.string().optional(),
+    company: z.string().optional(),
     phone: z.string().optional(),
     email: z.string().email().optional().or(z.literal("")),
     birthday: z.string().optional(),
@@ -40,8 +42,12 @@ export default function NewContactPage() {
     const onSubmit = async (data: ContactForm) => {
         setIsLoading(true);
         try {
+            const name = `${data.firstName} ${data.lastName || ""}`.trim();
             await createContact({
-                name: data.name,
+                first_name: data.firstName,
+                last_name: data.lastName,
+                company: data.company,
+                name: name,
                 phone: data.phone || null,
                 email: data.email || null,
                 birthday: data.birthday || null,
@@ -76,16 +82,35 @@ export default function NewContactPage() {
             <Card>
                 <CardContent className="p-6">
                     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="firstName">First Name *</Label>
+                                <Input
+                                    id="firstName"
+                                    placeholder="First Name"
+                                    {...register("firstName")}
+                                />
+                                {errors.firstName && (
+                                    <p className="text-sm text-destructive">{errors.firstName.message}</p>
+                                )}
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="lastName">Last Name</Label>
+                                <Input
+                                    id="lastName"
+                                    placeholder="Last Name"
+                                    {...register("lastName")}
+                                />
+                            </div>
+                        </div>
+
                         <div className="space-y-2">
-                            <Label htmlFor="name">Name *</Label>
+                            <Label htmlFor="company">Company</Label>
                             <Input
-                                id="name"
-                                placeholder="Contact name"
-                                {...register("name")}
+                                id="company"
+                                placeholder="Company Name"
+                                {...register("company")}
                             />
-                            {errors.name && (
-                                <p className="text-sm text-destructive">{errors.name.message}</p>
-                            )}
                         </div>
 
                         <div className="space-y-2">
