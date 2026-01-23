@@ -59,15 +59,16 @@ export default function ContactsPage() {
     }, []);
 
     const filteredContacts = contacts.filter((contact) =>
-        contact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        contact.company?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (contact.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (contact.company || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
         contact.phone?.includes(searchQuery) ||
         contact.email?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     // Group contacts by first letter
     const groupedContacts = filteredContacts.reduce((acc, contact) => {
-        const letter = contact.name[0].toUpperCase();
+        const name = contact.name || "?";
+        const letter = (name[0] || "?").toUpperCase();
         if (!acc[letter]) acc[letter] = [];
         acc[letter].push(contact);
         return acc;
