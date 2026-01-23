@@ -139,6 +139,7 @@ All tables have Row Level Security (RLS) enabled so users can only access their 
 2. Import the project in Vercel
 3. Add your environment variables
 4. Deploy!
+//
 
 ## License
 
