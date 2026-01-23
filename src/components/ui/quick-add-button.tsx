@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Receipt, CheckSquare, BookOpen } from "lucide-react";
+import { Plus, Receipt, CheckSquare, BookOpen, Target, TrendingUp, PiggyBank } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
     Dialog,
@@ -15,6 +15,10 @@ import { cn } from "@/lib/utils";
 const quickActions = [
     { name: "Expense", icon: Receipt, color: "text-red-500", href: "/finance/expenses/new" },
     { name: "Task", icon: CheckSquare, color: "text-blue-500", href: "/tasks/new" },
+    { name: "New Bill", icon: Receipt, color: "text-orange-500", href: "/finance/bills/new" },
+    { name: "Log Habit", icon: Target, color: "text-purple-500", href: "/habits" },
+    { name: "Asset", icon: TrendingUp, color: "text-cyan-500", href: "/finance/investments/new" },
+    { name: "Set Budget", icon: PiggyBank, color: "text-emerald-500", href: "/finance/budget" },
     { name: "Note", icon: BookOpen, color: "text-green-500", href: "/journal" },
 ];
 
