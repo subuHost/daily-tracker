@@ -1,5 +1,6 @@
 "use client";
 
+import { NotificationBell } from "./notification-bell";
 import { Search, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,10 +71,7 @@ export function Header() {
                     </Button>
 
                     {/* Notifications */}
-                    <Button variant="ghost" size="icon" className="relative">
-                        <Bell className="h-5 w-5" />
-                        <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-destructive rounded-full" />
-                    </Button>
+                    <NotificationBell />
 
                     {/* Theme toggle */}
                     <ThemeToggle />

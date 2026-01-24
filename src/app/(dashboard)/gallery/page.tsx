@@ -271,6 +271,7 @@ export default function GalleryPage() {
                                                     alt={item.description || "Gallery image"}
                                                     fill
                                                     className="object-cover"
+                                                    unoptimized
                                                 />
                                             ) : (
                                                 <FileText className="h-6 w-6 text-muted-foreground" />

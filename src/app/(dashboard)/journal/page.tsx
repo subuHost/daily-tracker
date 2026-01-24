@@ -19,6 +19,8 @@ import {
     X,
     Trash2,
 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { format, addDays, subDays } from "date-fns";
 import { toast } from "sonner";
 import { getDailyEntry, saveDailyEntry, uploadGalleryFile } from "@/lib/db";
@@ -36,7 +38,19 @@ interface DailyEntry {
 }
 
 export default function JournalPage() {
-    const [currentDate, setCurrentDate] = useState(new Date());
+    const searchParams = useSearchParams();
+    const router = useRouter();
+
+    // Initialize date from URL or default to today
+    const [currentDate, setCurrentDate] = useState(() => {
+        const dateParam = searchParams.get("date");
+        if (dateParam) {
+            const date = new Date(dateParam);
+            if (!isNaN(date.getTime())) return date;
+        }
+        return new Date();
+    });
+
     const [entry, setEntry] = useState<DailyEntry>({
         date: format(new Date(), "yyyy-MM-dd"),
         notes: "",
@@ -218,11 +232,18 @@ export default function JournalPage() {
     return (
         <div className="space-y-6 max-w-2xl mx-auto">
             {/* Header */}
-            <div>
-                <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Daily Journal</h1>
-                <p className="text-muted-foreground text-sm">
-                    Record your thoughts and activities
-                </p>
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Daily Journal</h1>
+                    <p className="text-muted-foreground text-sm">
+                        Record your thoughts and activities
+                    </p>
+                </div>
+                <Button variant="outline" size="sm" asChild>
+                    <Link href="/journal/history">
+                        View History
+                    </Link>
+                </Button>
             </div>
 
             {/* Date Navigation */}

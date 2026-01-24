@@ -9,7 +9,8 @@ import { NetWorthWidget } from "@/components/dashboard/net-worth-widget";
 import { QuickLinksWidget } from "@/components/dashboard/quick-links-widget";
 import { getGreeting } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
-import { getTransactions, getCurrentBudget, getMonthlySpent } from "@/lib/db";
+import { getCurrentBudget, getMonthlySpent, getTransactions } from "@/lib/db";
+import { EventsWidget } from "@/components/widgets/events-widget";
 
 interface Transaction {
     id: string;
@@ -88,6 +89,7 @@ export default function DashboardPage() {
                 {/* Row 1 */}
                 <BudgetWidget budget={budget} spent={spent} />
                 <TasksWidget />
+                <EventsWidget />
                 <NetWorthWidget />
 
                 {/* Row 2 */}

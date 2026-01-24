@@ -91,15 +91,11 @@ export async function createTransaction(input: TransactionInput): Promise<Transa
     return data;
 }
 
-// Get monthly summary for the current user
-export async function getMonthlyStats(month: number, year: number) {
+// Get summary for a date range
+export async function getStats(startDate: string, endDate: string) {
     const supabase = createClient();
-
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Not authenticated");
-
-    const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
-    const endDate = new Date(year, month, 0).toISOString().split("T")[0]; // Last day of month
 
     const { data, error } = await supabase
         .from("transactions")
@@ -128,15 +124,18 @@ export async function getMonthlyStats(month: number, year: number) {
     };
 }
 
-// Get spending by category for the current month
-export async function getCategoryBreakdown(month: number, year: number) {
-    const supabase = createClient();
+// Get monthly summary (Legacy Wrapper)
+export async function getMonthlyStats(month: number, year: number) {
+    const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+    const endDate = new Date(year, month, 0).toISOString().split("T")[0]; // Last day of month
+    return getStats(startDate, endDate);
+}
 
+// Get spending by category for a date range
+export async function getCategoryBreakdownRange(startDate: string, endDate: string) {
+    const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Not authenticated");
-
-    const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
-    const endDate = new Date(year, month, 0).toISOString().split("T")[0];
 
     const { data, error } = await supabase
         .from("transactions")
@@ -170,4 +169,11 @@ export async function getCategoryBreakdown(month: number, year: number) {
     });
 
     return Array.from(categoryMap.values());
+}
+
+// Get category breakdown (Legacy Wrapper)
+export async function getCategoryBreakdown(month: number, year: number) {
+    const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+    const endDate = new Date(year, month, 0).toISOString().split("T")[0];
+    return getCategoryBreakdownRange(startDate, endDate);
 }

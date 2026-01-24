@@ -157,6 +157,25 @@ export async function toggleHabitToday(habitId: string): Promise<boolean> {
     }
 }
 
+// Update a habit
+export async function updateHabit(id: string, updates: { name?: string; icon?: string; color?: string; target_days?: number }): Promise<Habit> {
+    const supabase = createClient();
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const { data, error } = await supabase
+        .from("habits")
+        .update(updates)
+        .eq("id", id)
+        .eq("user_id", user.id)
+        .select()
+        .single();
+
+    if (error) throw error;
+    return data;
+}
+
 // Delete a habit
 export async function deleteHabit(id: string): Promise<void> {
     const supabase = createClient();
