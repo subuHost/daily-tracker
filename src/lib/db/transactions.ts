@@ -177,3 +177,18 @@ export async function getCategoryBreakdown(month: number, year: number) {
     const endDate = new Date(year, month, 0).toISOString().split("T")[0];
     return getCategoryBreakdownRange(startDate, endDate);
 }
+
+// Delete a transaction
+export async function deleteTransaction(id: string): Promise<void> {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const { error } = await supabase
+        .from("transactions")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", user.id);
+
+    if (error) throw error;
+}

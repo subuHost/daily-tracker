@@ -209,6 +209,7 @@ export default function HabitsPage() {
                                         </div>
 
                                         <div className="flex items-center gap-2">
+
                                             {/* Toggle Button */}
                                             <div
                                                 onClick={(e) => toggleHabit(habit.id, e)}
@@ -243,6 +244,23 @@ export default function HabitsPage() {
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
                                         </div>
+                                    </div>
+
+                                    {/* Monthly Heatmap */}
+                                    <div className="mt-4 flex flex-wrap gap-1">
+                                        {Array.from({ length: 28 }).map((_, i) => {
+                                            const day = new Date();
+                                            day.setDate(day.getDate() - (27 - i)); // Last 28 days
+                                            const dayStr = day.toISOString().split("T")[0];
+                                            const isCompleted = habit.recentLogs?.includes(dayStr);
+                                            return (
+                                                <div
+                                                    key={i}
+                                                    title={dayStr}
+                                                    className={`w-2 h-2 rounded-full ${isCompleted ? "bg-green-500" : "bg-muted-foreground/20"}`}
+                                                />
+                                            )
+                                        })}
                                     </div>
                                 </CardContent>
                             </Card>

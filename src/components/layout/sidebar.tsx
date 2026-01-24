@@ -15,6 +15,7 @@ import {
     BarChart3,
     Settings,
     LogOut,
+    StickyNote,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ const navigation = [
     { name: "Calendar", href: "/calendar", icon: Calendar },
     { name: "Contacts", href: "/contacts", icon: Users },
     { name: "Gallery", href: "/gallery", icon: Image },
+    { name: "Notepad", href: "/notepad", icon: StickyNote },
     { name: "Reports", href: "/reports", icon: BarChart3 },
 ];
 
