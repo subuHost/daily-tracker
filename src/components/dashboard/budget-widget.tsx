@@ -20,7 +20,7 @@ export function BudgetWidget({ budget, spent }: BudgetWidgetProps) {
 
     return (
         <Card className="relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent pointer-events-none" />
             <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
                     Monthly Budget

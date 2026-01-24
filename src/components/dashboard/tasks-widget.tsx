@@ -45,7 +45,7 @@ export function TasksWidget({ tasks = [], bills = [] }: TasksWidgetProps) {
 
     return (
         <Card className="relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent pointer-events-none" />
             <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
                     Today&apos;s Tasks & Bills
