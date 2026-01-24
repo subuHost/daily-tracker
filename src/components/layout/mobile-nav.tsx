@@ -14,6 +14,7 @@ import {
     Users,
     Image,
     BarChart3,
+    StickyNote,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -36,6 +37,7 @@ const moreNavigation = [
     { name: "Shopping", href: "/shopping", icon: ShoppingBag },
     { name: "Contacts", href: "/contacts", icon: Users },
     { name: "Gallery", href: "/gallery", icon: Image },
+    { name: "Notepad", href: "/notepad", icon: StickyNote },
     { name: "Reports", href: "/reports", icon: BarChart3 },
 ];
 

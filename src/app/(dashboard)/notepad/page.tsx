@@ -44,11 +44,22 @@ export default function NotepadPage() {
         }
     };
 
+    const scrollToEditor = () => {
+        // Small delay to allow render
+        setTimeout(() => {
+            const editor = document.getElementById("notepad-editor");
+            if (editor) {
+                editor.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+        }, 100);
+    };
+
     const handleNewNote = () => {
         setSelectedNote(null);
         setTitle("");
         setContent("");
         setIsEditing(true);
+        scrollToEditor();
     };
 
     const handleSelectNote = (note: Note) => {
@@ -56,6 +67,7 @@ export default function NotepadPage() {
         setTitle(note.title || "");
         setContent(note.content);
         setIsEditing(true);
+        scrollToEditor();
     };
 
     const handleSave = async () => {
@@ -151,22 +163,22 @@ export default function NotepadPage() {
                                         key={note.id}
                                         onClick={() => handleSelectNote(note)}
                                         className={`w-full text-left p-3 rounded-lg transition-colors ${selectedNote?.id === note.id
-                                                ? "bg-primary text-primary-foreground"
-                                                : "hover:bg-accent"
+                                            ? "bg-primary text-primary-foreground"
+                                            : "hover:bg-accent"
                                             }`}
                                     >
                                         <p className="font-medium text-sm truncate">
                                             {note.title || "Untitled Note"}
                                         </p>
                                         <p className={`text-xs mt-1 truncate ${selectedNote?.id === note.id
-                                                ? "text-primary-foreground/70"
-                                                : "text-muted-foreground"
+                                            ? "text-primary-foreground/70"
+                                            : "text-muted-foreground"
                                             }`}>
                                             {note.content.slice(0, 50)}...
                                         </p>
                                         <p className={`text-[10px] mt-1 ${selectedNote?.id === note.id
-                                                ? "text-primary-foreground/50"
-                                                : "text-muted-foreground/70"
+                                            ? "text-primary-foreground/50"
+                                            : "text-muted-foreground/70"
                                             }`}>
                                             {formatDistanceToNow(new Date(note.updated_at), { addSuffix: true })}
                                         </p>
@@ -183,7 +195,7 @@ export default function NotepadPage() {
                 </Card>
 
                 {/* Editor */}
-                <Card className="lg:col-span-2">
+                <Card className="lg:col-span-2" id="notepad-editor">
                     <CardContent className="pt-6">
                         {isEditing ? (
                             <div className="space-y-4">
