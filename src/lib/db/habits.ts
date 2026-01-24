@@ -15,6 +15,7 @@ export interface HabitWithStats extends Habit {
     completedToday: boolean;
     completedDays: number;
     totalDays: number;
+    recentLogs: string[]; // dates of completion
 }
 
 export interface HabitLog {
@@ -92,6 +93,7 @@ export async function getHabits(): Promise<HabitWithStats[]> {
             completedToday,
             completedDays,
             totalDays,
+            recentLogs: habitLogs.map(l => l.date),
         };
     });
 }

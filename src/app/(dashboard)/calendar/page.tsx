@@ -24,12 +24,36 @@ import {
     parseISO,
 } from "date-fns";
 import { getCalendarEvents, type CalendarEvent } from "@/lib/db";
+import { type Event } from "@/lib/db/events";
+import { CalendarAddItemDialog } from "@/components/calendar/add-item-dialog";
+import { EditEventDialog } from "@/components/calendar/edit-event-dialog";
+
 
 export default function CalendarPage() {
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
     const [events, setEvents] = useState<CalendarEvent[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+
+    // Dialog State
+    const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+    const [dialogDate, setDialogDate] = useState<Date | null>(null);
+
+    // Edit Event State
+    const [editingEvent, setEditingEvent] = useState<Event | null>(null);
+
+    const refreshData = async () => {
+        setIsLoading(true);
+        try {
+            const data = await getCalendarEvents(calendarStart, calendarEnd);
+            setEvents(data);
+        } catch (error) {
+            console.error("Failed to load calendar events:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
 
     const monthStart = startOfMonth(currentMonth);
     const monthEnd = endOfMonth(currentMonth);
@@ -39,20 +63,9 @@ export default function CalendarPage() {
     const days = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
 
     useEffect(() => {
-        async function loadData() {
-            setIsLoading(true);
-            try {
-                // Fetch events for the visible calendar range
-                const data = await getCalendarEvents(calendarStart, calendarEnd);
-                setEvents(data);
-            } catch (error) {
-                console.error("Failed to load calendar events:", error);
-            } finally {
-                setIsLoading(false);
-            }
-        }
-        loadData();
+        refreshData();
     }, [currentMonth]);
+
 
     const goToPreviousMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
     const goToNextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
@@ -61,6 +74,23 @@ export default function CalendarPage() {
         setCurrentMonth(now);
         setSelectedDate(now);
     };
+
+    const handleDateClick = (date: Date) => {
+        setSelectedDate(date);
+        setDialogDate(date);
+        setIsAddDialogOpen(true);
+    };
+
+    const handleEventClick = (calendarEvent: CalendarEvent) => {
+        if (calendarEvent.type === 'event' && calendarEvent.details) {
+            // Only allow editing custom 'event' types
+            setEditingEvent(calendarEvent.details as Event);
+        } else {
+            // Future: Show read-only details for other types
+            console.log("Clicked non-editable event:", calendarEvent);
+        }
+    };
+
 
     const getEventsForDate = (date: Date) => {
         const dateStr = format(date, "yyyy-MM-dd");
@@ -120,7 +150,7 @@ export default function CalendarPage() {
                                 return (
                                     <button
                                         key={index}
-                                        onClick={() => setSelectedDate(day)}
+                                        onClick={() => handleDateClick(day)}
                                         className={`
                                             aspect-square p-0.5 sm:p-1 rounded-lg text-xs sm:text-sm relative
                                             ${isCurrentMonth ? "" : "text-muted-foreground/50"}
@@ -171,7 +201,9 @@ export default function CalendarPage() {
                                 {selectedDateEvents.map((event) => (
                                     <div
                                         key={event.id}
-                                        className="flex items-center gap-3 p-2 rounded-lg bg-accent/50"
+                                        onClick={() => handleEventClick(event)}
+                                        className={`flex items-center gap-3 p-2 rounded-lg bg-accent/50 transition-colors ${event.type === 'event' ? 'cursor-pointer hover:bg-accent' : ''
+                                            }`}
                                     >
                                         <div
                                             className="w-2 h-2 rounded-full shrink-0"
@@ -227,6 +259,19 @@ export default function CalendarPage() {
                     </div>
                 </CardContent>
             </Card>
+
+            <CalendarAddItemDialog
+                open={isAddDialogOpen}
+                onOpenChange={setIsAddDialogOpen}
+                selectedDate={dialogDate}
+                onSuccess={refreshData}
+            />
+
+            <EditEventDialog
+                event={editingEvent}
+                onOpenChange={(open) => !open && setEditingEvent(null)}
+                onSuccess={refreshData}
+            />
         </div>
     );
 }

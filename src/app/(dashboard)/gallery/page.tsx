@@ -31,6 +31,15 @@ import { toast } from "sonner";
 import { deleteGalleryItem, updateGalleryItem } from "@/lib/db";
 import { Trash2, Edit2, Save as SaveIcon, Tag } from "lucide-react";
 
+const isImageFile = (item: GalleryItem) => {
+    return (
+        item.file_type?.startsWith("image/") ||
+        item.tags?.includes("image") ||
+        /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(item.file_url)
+    );
+};
+
+
 export default function GalleryPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -211,9 +220,7 @@ export default function GalleryPage() {
                 viewMode === "grid" ? (
                     <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
                         {filteredItems.map((item) => {
-                            const isImage = (item.file_type?.startsWith("image") ||
-                                item.tags?.includes("image") ||
-                                /\.(jpg|jpeg|png|gif|webp)$/i.test(item.file_url));
+                            const isImage = isImageFile(item);
 
                             return (
                                 <Card
@@ -230,6 +237,7 @@ export default function GalleryPage() {
                                                     fill
                                                     className="object-cover"
                                                     unoptimized
+                                                    onError={(e) => console.error("Image load error for URL:", item.file_url, e)}
                                                 />
                                             </div>
                                         ) : (
@@ -265,13 +273,14 @@ export default function GalleryPage() {
                                 <CardContent className="p-4">
                                     <div className="flex items-center gap-4">
                                         <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center shrink-0 overflow-hidden relative">
-                                            {(item.file_type && item.file_type.startsWith("image")) ? (
+                                            {isImageFile(item) ? (
                                                 <Image
                                                     src={item.file_url}
                                                     alt={item.description || "Gallery image"}
                                                     fill
                                                     className="object-cover"
                                                     unoptimized
+                                                    onError={(e) => console.error("Image load error for URL:", item.file_url, e)}
                                                 />
                                             ) : (
                                                 <FileText className="h-6 w-6 text-muted-foreground" />
@@ -324,13 +333,14 @@ export default function GalleryPage() {
                     {selectedItem && (
                         <div className="space-y-6">
                             <div className="relative aspect-video w-full bg-muted rounded-lg overflow-hidden flex items-center justify-center">
-                                {selectedItem.file_type?.startsWith("image") || selectedItem.tags?.includes("image") ? (
+                                {isImageFile(selectedItem) ? (
                                     <Image
                                         src={selectedItem.file_url}
                                         alt={selectedItem.description || "Gallery Item"}
                                         fill
                                         className="object-contain"
                                         unoptimized
+                                        onError={(e) => console.error("Image load error for URL:", selectedItem.file_url, e)}
                                     />
                                 ) : (
                                     <div className="flex flex-col items-center gap-2 text-muted-foreground">

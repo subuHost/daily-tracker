@@ -92,3 +92,28 @@ export async function deleteEvent(id: string): Promise<void> {
 
     if (error) throw error;
 }
+
+// Update event
+export async function updateEvent(id: string, input: Partial<EventInput>): Promise<Event> {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const { data, error } = await supabase
+        .from("events")
+        .update({
+            title: input.title,
+            description: input.description,
+            date: input.date,
+            type: input.type,
+            location: input.location,
+        })
+        .eq("id", id)
+        .eq("user_id", user.id)
+        .select()
+        .single();
+
+    if (error) throw error;
+    return data;
+}
+

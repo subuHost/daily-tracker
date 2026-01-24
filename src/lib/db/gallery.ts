@@ -71,6 +71,8 @@ export async function uploadGalleryFile(
         .from("gallery")
         .getPublicUrl(uploadData.path);
 
+    console.log("Upload successful. Path:", uploadData.path, "Public URL:", urlData.publicUrl);
+
     // Create gallery item in database
     const { data, error } = await supabase
         .from("gallery_items")
