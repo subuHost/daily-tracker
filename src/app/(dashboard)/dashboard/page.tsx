@@ -5,7 +5,9 @@ import { ExpensesWidget } from "@/components/dashboard/expenses-widget";
 import { HabitsWidget } from "@/components/dashboard/habits-widget";
 import { NetWorthWidget } from "@/components/dashboard/net-worth-widget";
 import { QuickLinksWidget } from "@/components/dashboard/quick-links-widget";
+import { getCurrentBudget, getMonthlySpent, getTransactions } from "@/lib/db";
 import { EventsWidget } from "@/components/widgets/events-widget";
+import { TransactionReviewStack } from "@/components/dashboard/transaction-review-stack";
 import { getGreeting } from "@/lib/utils";
 import {
     BudgetWidgetSkeleton,
@@ -132,6 +134,11 @@ export default function DashboardPage() {
                 <Suspense fallback={<ExpensesWidgetSkeleton />}>
                     <ExpensesWidgetServer />
                 </Suspense>
+
+                {/* Transaction Review Widget */}
+                <div className="md:col-span-1">
+                    <TransactionReviewStack />
+                </div>
 
                 {/* Habits Widget */}
                 <Suspense fallback={<HabitsWidgetSkeleton />}>
