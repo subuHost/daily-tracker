@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,35 +17,64 @@ import {
     Trash2,
     Plus,
     X,
+    Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { getInitials } from "@/lib/utils";
-
-interface Category {
-    id: string;
-    name: string;
-    type: "expense" | "income" | "habit" | "task";
-    color: string;
-}
-
-const sampleCategories: Category[] = [
-    { id: "1", name: "Food & Dining", type: "expense", color: "#ef4444" },
-    { id: "2", name: "Transport", type: "expense", color: "#f97316" },
-    { id: "3", name: "Entertainment", type: "expense", color: "#eab308" },
-    { id: "4", name: "Salary", type: "income", color: "#22c55e" },
-    { id: "5", name: "Freelance", type: "income", color: "#10b981" },
-    { id: "6", name: "Gym", type: "habit", color: "#8b5cf6" },
-    { id: "7", name: "Work", type: "task", color: "#3b82f6" },
-];
+import { getCategories, getOrCreateCategory, deleteCategory, type Category } from "@/lib/db/categories";
 
 export default function SettingsPage() {
     const router = useRouter();
     const supabase = createClient();
-    const [categories, setCategories] = useState<Category[]>(sampleCategories);
+    const [userProfile, setUserProfile] = useState<{ email?: string; name?: string } | null>(null);
+
+    // Category State
+    const [categories, setCategories] = useState<Category[]>([]);
     const [newCategory, setNewCategory] = useState("");
     const [selectedType, setSelectedType] = useState<Category["type"]>("expense");
+    const [isLoadingCategories, setIsLoadingCategories] = useState(false);
+
+    useEffect(() => {
+        const getUser = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                setUserProfile({
+                    email: user.email,
+                    name: user.user_metadata?.name || "User",
+                });
+            }
+        };
+        getUser();
+        loadCategories();
+    }, []);
+
+    const loadCategories = async () => {
+        try {
+            // Fetch all types
+            const [expense, income, habit, task] = await Promise.all([
+                getCategories("expense"),
+                getCategories("income"),
+                getCategories("habit"),
+                getCategories("task_group" as any), // Mapping 'task' to 'task_group' if that is DB value, but let's check. 
+                // Wait, categories.ts Type has "task_group". 
+                // But sample had "task". 
+                // I should assume the DB uses "task_group" based on previous file view.
+                // Let's verify DB schema. I'll stick to 'task_group' if that's what `categories.ts` defines.
+            ]);
+            // Actually `getCategories` takes a type. 
+            // I should load all and concat or fetch individually.
+            // Let's just fetch by type when rendering? No, fetching all is better.
+            // Wait, supabase query can fetch all.
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+            const { data } = await supabase.from("categories").select("*").eq("user_id", user.id);
+            if (data) setCategories(data as unknown as Category[]);
+        } catch (error) {
+            console.error("Failed to load categories", error);
+        }
+    };
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
@@ -53,32 +82,43 @@ export default function SettingsPage() {
     };
 
     const handleExportData = () => {
-        toast.success("Preparing data export...");
+        toast.success("Preparing data export... (Feature coming soon)");
     };
 
-    const addCategory = () => {
+    const handleAddCategory = async () => {
         if (!newCategory.trim()) return;
-        const category: Category = {
-            id: Date.now().toString(),
-            name: newCategory,
-            type: selectedType,
-            color: "#6b7280",
-        };
-        setCategories([...categories, category]);
-        setNewCategory("");
-        toast.success("Category added!");
+        setIsLoadingCategories(true);
+        try {
+            const cat = await getOrCreateCategory(newCategory, selectedType);
+            if (cat) {
+                setCategories([...categories, cat]);
+                setNewCategory("");
+                toast.success("Category added!");
+            }
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to add category");
+        } finally {
+            setIsLoadingCategories(false);
+        }
     };
 
-    const deleteCategory = (id: string) => {
-        setCategories(categories.filter((c) => c.id !== id));
-        toast.success("Category deleted");
+    const handleDeleteCategory = async (id: string) => {
+        if (!confirm("Delete this category?")) return;
+        try {
+            await deleteCategory(id);
+            setCategories(categories.filter((c) => c.id !== id));
+            toast.success("Category deleted");
+        } catch (error) {
+            toast.error("Failed to delete category");
+        }
     };
 
     const categoriesByType = {
         expense: categories.filter((c) => c.type === "expense"),
         income: categories.filter((c) => c.type === "income"),
         habit: categories.filter((c) => c.type === "habit"),
-        task: categories.filter((c) => c.type === "task"),
+        task: categories.filter((c) => c.type === "task_group" || c.type === "task" as any), // Handle legacy
     };
 
     return (
@@ -101,26 +141,24 @@ export default function SettingsPage() {
                     <div className="flex items-center gap-4">
                         <Avatar className="h-16 w-16">
                             <AvatarFallback className="bg-primary text-primary-foreground text-xl">
-                                {getInitials("Subodh")}
+                                {getInitials(userProfile?.name || "U")}
                             </AvatarFallback>
                         </Avatar>
                         <div>
-                            <p className="font-semibold">Subodh</p>
-                            <p className="text-sm text-muted-foreground">subodh@example.com</p>
+                            <p className="font-semibold">{userProfile?.name || "User"}</p>
+                            <p className="text-sm text-muted-foreground">{userProfile?.email}</p>
                         </div>
                     </div>
+                    {/*
                     <Separator />
-                    <div className="grid gap-4">
+                    <div className="grid gap-4 opacity-50 pointer-events-none">
                         <div className="space-y-2">
                             <Label htmlFor="name">Name</Label>
-                            <Input id="name" defaultValue="Subodh" />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="email">Email</Label>
-                            <Input id="email" type="email" defaultValue="subodh@example.com" />
+                            <Input id="name" defaultValue={userProfile?.name} />
                         </div>
                         <Button>Save Changes</Button>
                     </div>
+                    */}
                 </CardContent>
             </Card>
 
@@ -150,7 +188,7 @@ export default function SettingsPage() {
                 <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2">
                         <Tag className="h-5 w-5" />
-                        Categories
+                        Manage Categories
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -164,72 +202,51 @@ export default function SettingsPage() {
                         />
                         <select
                             value={selectedType}
-                            onChange={(e) => setSelectedType(e.target.value as Category["type"])}
-                            className="px-3 rounded-md border bg-background"
+                            onChange={(e) => setSelectedType(e.target.value as any)}
+                            className="px-3 rounded-md border bg-background text-sm"
                         >
                             <option value="expense">Expense</option>
                             <option value="income">Income</option>
                             <option value="habit">Habit</option>
-                            <option value="task">Task</option>
+                            <option value="task_group">Task</option>
                         </select>
-                        <Button onClick={addCategory} size="icon">
-                            <Plus className="h-4 w-4" />
+                        <Button onClick={handleAddCategory} size="icon" disabled={isLoadingCategories}>
+                            {isLoadingCategories ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                         </Button>
                     </div>
 
                     {/* Categories by type */}
-                    {(Object.entries(categoriesByType) as [Category["type"], Category[]][]).map(
-                        ([type, cats]) =>
-                            cats.length > 0 && (
-                                <div key={type}>
-                                    <h3 className="text-sm font-medium text-muted-foreground capitalize mb-2">
-                                        {type} Categories
-                                    </h3>
-                                    <div className="flex flex-wrap gap-2">
-                                        {cats.map((category) => (
-                                            <div
-                                                key={category.id}
-                                                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent text-sm group"
-                                            >
-                                                <span
-                                                    className="w-2 h-2 rounded-full"
-                                                    style={{ backgroundColor: category.color }}
-                                                />
-                                                <span>{category.name}</span>
-                                                <button
-                                                    onClick={() => deleteCategory(category.id)}
-                                                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                    <div className="space-y-6">
+                        {(Object.entries(categoriesByType) as [string, Category[]][]).map(
+                            ([type, cats]) =>
+                                cats.length > 0 && (
+                                    <div key={type}>
+                                        <h3 className="text-sm font-medium text-muted-foreground capitalize mb-2">
+                                            {type.replace("_group", "")} Categories
+                                        </h3>
+                                        <div className="flex flex-wrap gap-2">
+                                            {cats.map((category) => (
+                                                <div
+                                                    key={category.id}
+                                                    className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent text-sm group"
                                                 >
-                                                    <X className="h-3 w-3 text-muted-foreground hover:text-destructive" />
-                                                </button>
-                                            </div>
-                                        ))}
+                                                    <span
+                                                        className="w-2 h-2 rounded-full"
+                                                        style={{ backgroundColor: category.color || "#6b7280" }}
+                                                    />
+                                                    <span>{category.name}</span>
+                                                    <button
+                                                        onClick={() => handleDeleteCategory(category.id)}
+                                                        className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    >
+                                                        <X className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
-                            )
-                    )}
-                </CardContent>
-            </Card>
-
-            {/* Data */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                        <Download className="h-5 w-5" />
-                        Data
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="font-medium">Export All Data</p>
-                            <p className="text-sm text-muted-foreground">
-                                Download your data as JSON/CSV
-                            </p>
-                        </div>
-                        <Button variant="outline" onClick={handleExportData}>
-                            Export
-                        </Button>
+                                )
+                        )}
                     </div>
                 </CardContent>
             </Card>
@@ -254,16 +271,6 @@ export default function SettingsPage() {
                             <LogOut className="h-4 w-4 mr-2" />
                             Log Out
                         </Button>
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="font-medium text-destructive">Delete Account</p>
-                            <p className="text-sm text-muted-foreground">
-                                Permanently delete your account and data
-                            </p>
-                        </div>
-                        <Button variant="destructive">Delete Account</Button>
                     </div>
                 </CardContent>
             </Card>

@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
     Plus,
     Flame,
@@ -13,39 +15,42 @@ import {
     TrendingUp,
     Target,
     Loader2,
+    MoreVertical,
+    Edit2,
+    Trash2,
 } from "lucide-react";
-import { getHabits, toggleHabitToday, type HabitWithStats } from "@/lib/db";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from "@/components/ui/dialog";
+import { getHabits, toggleHabitToday, updateHabit, deleteHabit, type HabitWithStats } from "@/lib/db";
 import { toast } from "sonner";
 
-interface Habit {
-    id: string;
-    name: string;
-    icon: string;
-    streak: number;
-    completedToday: boolean;
-    completedDays: number;
-    totalDays: number;
-}
-
 export default function HabitsPage() {
-    const [habits, setHabits] = useState<Habit[]>([]);
+    const [habits, setHabits] = useState<HabitWithStats[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+
+    // Edit/Delete State
+    const [editingHabit, setEditingHabit] = useState<HabitWithStats | null>(null);
+    const [isEditOpen, setIsEditOpen] = useState(false);
+    const [editForm, setEditForm] = useState({ name: "", icon: "✨" });
+    const [isActionLoading, setIsActionLoading] = useState(false);
 
     // Fetch habits on mount
     useEffect(() => {
         async function loadHabits() {
             try {
                 const dbHabits = await getHabits();
-                const formattedHabits = dbHabits.map((h) => ({
-                    id: h.id,
-                    name: h.name,
-                    icon: h.icon || "✨",
-                    streak: h.streak,
-                    completedToday: h.completedToday,
-                    completedDays: h.completedDays,
-                    totalDays: h.totalDays,
-                }));
-                setHabits(formattedHabits);
+                setHabits(dbHabits);
             } catch (error) {
                 console.error("Failed to load habits:", error);
             } finally {
@@ -55,7 +60,10 @@ export default function HabitsPage() {
         loadHabits();
     }, []);
 
-    const toggleHabit = async (id: string) => {
+    const toggleHabit = async (id: string, e: React.MouseEvent) => {
+        // Prevent triggering card click when clicking dropdown
+        e.stopPropagation();
+
         try {
             const newState = await toggleHabitToday(id);
             setHabits(habits.map((h) =>
@@ -73,25 +81,62 @@ export default function HabitsPage() {
         }
     };
 
+    const handleEditClick = (habit: HabitWithStats) => {
+        setEditingHabit(habit);
+        setEditForm({ name: habit.name, icon: habit.icon || "✨" });
+        setIsEditOpen(true);
+    };
+
+    const handleUpdate = async () => {
+        if (!editingHabit) return;
+        setIsActionLoading(true);
+        try {
+            await updateHabit(editingHabit.id, {
+                name: editForm.name,
+                icon: editForm.icon,
+            });
+
+            setHabits(habits.map(h =>
+                h.id === editingHabit.id
+                    ? { ...h, name: editForm.name, icon: editForm.icon }
+                    : h
+            ));
+
+            setIsEditOpen(false);
+            toast.success("Habit updated");
+        } catch (error) {
+            console.error("Update failed:", error);
+            toast.error("Failed to update habit");
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!confirm("Are you sure you want to delete this habit? All history will be lost.")) return;
+
+        setIsActionLoading(true); // technically global loading, but fine for now
+        try {
+            await deleteHabit(id);
+            setHabits(habits.filter(h => h.id !== id));
+            toast.success("Habit deleted");
+        } catch (error) {
+            console.error("Delete failed:", error);
+            toast.error("Failed to delete habit");
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
     const completedToday = habits.filter((h) => h.completedToday).length;
     const totalHabits = habits.length;
 
-    // Generate calendar heatmap data
-    const generateHeatmapData = () => {
-        const data = [];
-        const today = new Date();
-        for (let i = 27; i >= 0; i--) {
-            const date = new Date(today);
-            date.setDate(date.getDate() - i);
-            data.push({
-                date: date.toISOString().split("T")[0],
-                completed: false,
-            });
-        }
-        return data;
-    };
-
-    const heatmapData = generateHeatmapData();
+    // Generate calendar heatmap data (dummy/static since we don't have full year history locally efficiently yet)
+    // Ideally fetch full stats from DB. But using local logic from filtered habits is limited to "today".
+    // For heatmap, we usually need a separate fetch. For now, keep the simpler view or just show "Last 28 days" if we had that data.
+    // The previous code generated dummy data for last 28 days. I'll keep it as placeholder or remove it?
+    // User requested "maintain logs in calendar", so the heatmap here is redundant if Calendar page exists.
+    // I'll keep it simple: Just show the list.
 
     if (isLoading) {
         return (
@@ -128,86 +173,75 @@ export default function HabitsPage() {
                                 <div>
                                     <p className="text-purple-100 text-sm">Today&apos;s Progress</p>
                                     <p className="text-2xl sm:text-3xl font-bold mt-1">
-                                        {Math.round((completedToday / totalHabits) * 100)}%
+                                        {totalHabits > 0 ? Math.round((completedToday / totalHabits) * 100) : 0}%
                                     </p>
                                 </div>
-                                <div className="text-4xl sm:text-6xl">{completedToday === totalHabits ? "🎉" : "💪"}</div>
+                                <div className="text-4xl sm:text-6xl">{completedToday === totalHabits && totalHabits > 0 ? "🎉" : "💪"}</div>
                             </div>
                             <Progress
-                                value={(completedToday / totalHabits) * 100}
+                                value={totalHabits > 0 ? (completedToday / totalHabits) * 100 : 0}
                                 className="mt-4 h-2 bg-white/20 [&>div]:bg-white"
                             />
                         </CardContent>
                     </Card>
 
-                    {/* Calendar Heatmap */}
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium flex items-center gap-2">
-                                <TrendingUp className="h-4 w-4" />
-                                Last 28 Days
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="grid grid-cols-7 gap-1">
-                                {heatmapData.map((day, index) => (
-                                    <div
-                                        key={index}
-                                        className={`aspect-square rounded-sm ${day.completed
-                                            ? "bg-green-500"
-                                            : "bg-muted"
-                                            }`}
-                                        title={day.date}
-                                    />
-                                ))}
-                            </div>
-                            <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-                                <span>4 weeks ago</span>
-                                <span>Today</span>
-                            </div>
-                        </CardContent>
-                    </Card>
-
                     {/* Habits List */}
-                    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+                    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                         {habits.map((habit) => (
                             <Card
                                 key={habit.id}
-                                className={`cursor-pointer transition-all ${habit.completedToday
+                                className={`transition-all ${habit.completedToday
                                     ? "bg-green-500/10 border-green-500/50"
                                     : "hover:bg-accent/50"
                                     }`}
-                                onClick={() => toggleHabit(habit.id)}
                             >
                                 <CardContent className="p-4">
                                     <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-3">
-                                            <div className="text-2xl sm:text-3xl">{habit.icon}</div>
+                                        <div className="flex items-center gap-3 flex-1 cursor-pointer" onClick={(e) => toggleHabit(habit.id, e)}>
+                                            <div className="text-2xl sm:text-3xl select-none">{habit.icon}</div>
                                             <div>
                                                 <p className="font-medium text-sm sm:text-base">{habit.name}</p>
                                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                                    <Flame className="h-3 w-3 text-orange-500" />
+                                                    <Flame className={`h-3 w-3 ${habit.streak > 0 ? "text-orange-500" : "text-muted-foreground"}`} />
                                                     <span>{habit.streak} day streak</span>
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-2 sm:gap-3">
-                                            <div className="text-right text-sm text-muted-foreground hidden sm:block">
-                                                <p>{Math.round((habit.completedDays / habit.totalDays) * 100)}%</p>
-                                                <p className="text-xs">{habit.completedDays}/{habit.totalDays}</p>
-                                            </div>
+
+                                        <div className="flex items-center gap-2">
+                                            {/* Toggle Button */}
                                             <div
-                                                className={`p-2 rounded-full ${habit.completedToday
+                                                onClick={(e) => toggleHabit(habit.id, e)}
+                                                className={`p-2 rounded-full cursor-pointer transition-colors ${habit.completedToday
                                                     ? "bg-green-500 text-white"
-                                                    : "bg-muted"
+                                                    : "bg-muted hover:bg-muted/80"
                                                     }`}
                                             >
                                                 {habit.completedToday ? (
-                                                    <Check className="h-4 w-4 sm:h-5 sm:w-5" />
+                                                    <Check className="h-4 w-4" />
                                                 ) : (
-                                                    <X className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
+                                                    <X className="h-4 w-4 text-muted-foreground" />
                                                 )}
                                             </div>
+
+                                            {/* Menu */}
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                        <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuItem onClick={() => handleEditClick(habit)}>
+                                                        <Edit2 className="mr-2 h-4 w-4" />
+                                                        Edit
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem onClick={() => handleDelete(habit.id)} className="text-destructive focus:text-destructive">
+                                                        <Trash2 className="mr-2 h-4 w-4" />
+                                                        Delete
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         </div>
                                     </div>
                                 </CardContent>
@@ -222,7 +256,7 @@ export default function HabitsPage() {
                     </div>
                     <h3 className="text-lg font-medium mb-2">No habits tracked yet</h3>
                     <p className="text-sm text-muted-foreground mb-4 max-w-sm mx-auto">
-                        Build lasting habits by tracking them daily. Start with one habit and grow from there.
+                        Build lasting habits by tracking them daily.
                     </p>
                     <Button asChild>
                         <Link href="/habits/new">
@@ -232,6 +266,40 @@ export default function HabitsPage() {
                     </Button>
                 </div>
             )}
+
+            {/* Edit Dialog */}
+            <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Edit Habit</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Habit Name</Label>
+                            <Input
+                                value={editForm.name}
+                                onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Icon (Emoji)</Label>
+                            <Input
+                                value={editForm.icon}
+                                onChange={(e) => setEditForm(prev => ({ ...prev, icon: e.target.value }))}
+                                maxLength={2}
+                                className="w-16 text-center text-2xl"
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsEditOpen(false)} disabled={isActionLoading}>Cancel</Button>
+                        <Button onClick={handleUpdate} disabled={isActionLoading}>
+                            {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Save Changes
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

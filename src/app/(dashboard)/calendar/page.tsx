@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
     ChevronLeft,
     ChevronRight,
     Calendar as CalendarIcon,
+    Loader2,
 } from "lucide-react";
 import {
     format,
@@ -20,20 +21,15 @@ import {
     isSameMonth,
     isSameDay,
     isToday,
+    parseISO,
 } from "date-fns";
-
-interface CalendarEvent {
-    id: string;
-    title: string;
-    date: string;
-    type: "task" | "bill" | "birthday" | "habit";
-    color: string;
-}
+import { getCalendarEvents, type CalendarEvent } from "@/lib/db";
 
 export default function CalendarPage() {
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
-    const [events] = useState<CalendarEvent[]>([]);
+    const [events, setEvents] = useState<CalendarEvent[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
     const monthStart = startOfMonth(currentMonth);
     const monthEnd = endOfMonth(currentMonth);
@@ -42,11 +38,28 @@ export default function CalendarPage() {
 
     const days = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
 
+    useEffect(() => {
+        async function loadData() {
+            setIsLoading(true);
+            try {
+                // Fetch events for the visible calendar range
+                const data = await getCalendarEvents(calendarStart, calendarEnd);
+                setEvents(data);
+            } catch (error) {
+                console.error("Failed to load calendar events:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        loadData();
+    }, [currentMonth]);
+
     const goToPreviousMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
     const goToNextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
     const goToToday = () => {
-        setCurrentMonth(new Date());
-        setSelectedDate(new Date());
+        const now = new Date();
+        setCurrentMonth(now);
+        setSelectedDate(now);
     };
 
     const getEventsForDate = (date: Date) => {
@@ -62,7 +75,7 @@ export default function CalendarPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Calendar</h1>
-                    <p className="text-muted-foreground text-sm">View all your events</p>
+                    <p className="text-muted-foreground text-sm">View all your events and logs</p>
                 </div>
                 <Button variant="outline" onClick={goToToday} className="w-full sm:w-auto">
                     Today
@@ -118,14 +131,19 @@ export default function CalendarPage() {
                                     >
                                         <span className="block">{format(day, "d")}</span>
                                         {dayEvents.length > 0 && (
-                                            <div className="absolute bottom-0.5 sm:bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5">
-                                                {dayEvents.slice(0, 3).map((event, i) => (
+                                            <div className="absolute bottom-0.5 sm:bottom-1 left-1/2 -translate-x-1/2 flex flex-col items-center gap-0.5 w-full px-1">
+                                                {dayEvents.filter(e => e.type !== 'finance').slice(0, 3).map((event, i) => (
                                                     <div
                                                         key={i}
                                                         className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full"
                                                         style={{ backgroundColor: event.color }}
                                                     />
                                                 ))}
+                                                {dayEvents.find(e => e.type === 'finance') && (
+                                                    <span className="text-[9px] sm:text-[10px] leading-none text-red-500 font-bold -mt-0.5 truncate max-w-full">
+                                                        {dayEvents.find(e => e.type === 'finance')?.title.replace("Spent: ", "₹")}
+                                                    </span>
+                                                )}
                                             </div>
                                         )}
                                     </button>
@@ -136,7 +154,7 @@ export default function CalendarPage() {
                 </Card>
 
                 {/* Selected Date Events */}
-                <Card>
+                <Card className="h-fit">
                     <CardHeader>
                         <CardTitle className="text-sm font-medium flex items-center gap-2">
                             <CalendarIcon className="h-4 w-4" />
@@ -144,7 +162,11 @@ export default function CalendarPage() {
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        {selectedDateEvents.length > 0 ? (
+                        {isLoading ? (
+                            <div className="flex justify-center py-8">
+                                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                            </div>
+                        ) : selectedDateEvents.length > 0 ? (
                             <div className="space-y-3">
                                 {selectedDateEvents.map((event) => (
                                     <div
@@ -152,15 +174,20 @@ export default function CalendarPage() {
                                         className="flex items-center gap-3 p-2 rounded-lg bg-accent/50"
                                     >
                                         <div
-                                            className="w-2 h-2 rounded-full"
+                                            className="w-2 h-2 rounded-full shrink-0"
                                             style={{ backgroundColor: event.color }}
                                         />
                                         <div>
-                                            <p className="text-sm font-medium">{event.title}</p>
+                                            <p className="text-sm font-medium line-clamp-1">{event.title}</p>
                                             <p className="text-xs text-muted-foreground capitalize">
-                                                {event.type}
+                                                {event.type === 'finance' ? 'Total Spent' : event.type === 'log' ? 'Activity Log' : event.type}
                                             </p>
                                         </div>
+                                        {event.type === 'finance' && (
+                                            <div className="text-right text-sm font-bold text-red-500 ml-auto">
+                                                {event.title.replace("Spent: ", "₹")}
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>
@@ -168,7 +195,9 @@ export default function CalendarPage() {
                             <div className="text-center py-8 text-muted-foreground">
                                 <CalendarIcon className="h-12 w-12 mx-auto mb-2 opacity-20" />
                                 <p className="text-sm">No events on this day</p>
-                                <p className="text-xs mt-1">Events from tasks, bills, and birthdays will appear here</p>
+                                <p className="text-xs mt-1">
+                                    Tasks, bills, birthdays, and completed habits will appear here
+                                </p>
                             </div>
                         )}
                     </CardContent>
@@ -184,7 +213,7 @@ export default function CalendarPage() {
                             <span className="text-xs sm:text-sm text-muted-foreground">Tasks</span>
                         </div>
                         <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-red-500" />
+                            <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-amber-500" />
                             <span className="text-xs sm:text-sm text-muted-foreground">Bills</span>
                         </div>
                         <div className="flex items-center gap-2">
@@ -193,7 +222,7 @@ export default function CalendarPage() {
                         </div>
                         <div className="flex items-center gap-2">
                             <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-green-500" />
-                            <span className="text-xs sm:text-sm text-muted-foreground">Habits</span>
+                            <span className="text-xs sm:text-sm text-muted-foreground">Habits/Logs</span>
                         </div>
                     </div>
                 </CardContent>

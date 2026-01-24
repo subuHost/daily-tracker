@@ -118,5 +118,60 @@ export async function getGymDaysThisMonth(): Promise<number> {
         .lte("date", endDate);
 
     if (error) throw error;
+    if (error) throw error;
     return (data || []).length;
+}
+
+// Get average mood stats
+export async function getMoodStats(month?: number, year?: number, startDate?: string, endDate?: string): Promise<{ average: number; breakdown: Record<number, number> }> {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { average: 0, breakdown: {} };
+
+    let query = supabase
+        .from("daily_entries")
+        .select("mood, date")
+        .eq("user_id", user.id)
+        .not("mood", "is", null);
+
+    if (startDate && endDate) {
+        query = query.gte("date", startDate).lte("date", endDate);
+    } else if (month && year) {
+        const sDate = `${year}-${String(month).padStart(2, "0")}-01`;
+        const lastDay = new Date(year, month, 0).getDate();
+        const eDate = `${year}-${String(month).padStart(2, "0")}-${lastDay}`;
+        query = query.gte("date", sDate).lte("date", eDate);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+    if (!data || data.length === 0) return { average: 0, breakdown: {} };
+
+    const total = data.reduce((acc, curr) => acc + (curr.mood || 0), 0);
+    const average = total / data.length;
+
+    const breakdown: Record<number, number> = {};
+    data.forEach(entry => {
+        const mood = entry.mood || 0;
+        breakdown[mood] = (breakdown[mood] || 0) + 1;
+    });
+
+    return { average, breakdown };
+}
+
+// Get all journal entries (for history list)
+export async function getAllEntries(): Promise<DailyEntry[]> {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const { data, error } = await supabase
+        .from("daily_entries")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("date", { ascending: false });
+
+    if (error) throw error;
+    return data || [];
 }

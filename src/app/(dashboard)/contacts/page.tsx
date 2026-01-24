@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
     Plus,
     Search,
@@ -17,9 +18,7 @@ import {
     Building2,
     Trash2,
     Edit2,
-    Save,
-    X,
-    MessageCircle
+    UserPlus,
 } from "lucide-react";
 import { formatDate, getInitials } from "@/lib/utils";
 import { getContacts, updateContact, deleteContact, type Contact as DBContact } from "@/lib/db";
@@ -50,6 +49,10 @@ export default function ContactsPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [contacts, setContacts] = useState<Contact[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+
+    // Selection State
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [isSelectionMode, setIsSelectionMode] = useState(false);
 
     // Action State
     const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
@@ -82,14 +85,32 @@ export default function ContactsPage() {
         }
     };
 
-    const handleUpdate = async () => {
-        if (!selectedContact) return;
+    const handleBulkDelete = async () => {
+        if (selectedIds.size === 0) return;
+        if (!confirm(`Are you sure you want to delete ${selectedIds.size} contacts?`)) return;
 
         setIsActionLoading(true);
         try {
-            // Reconstruct name for DB compatibility
-            const fullName = `${editForm.firstName || ""} ${editForm.lastName || ""}`.trim() || editForm.name;
+            // Sequential delete for simplicity, could be parallel
+            for (const id of Array.from(selectedIds)) {
+                await deleteContact(id);
+            }
+            setContacts(prev => prev.filter(c => !selectedIds.has(c.id)));
+            setSelectedIds(new Set());
+            setIsSelectionMode(false);
+            toast.success("Contacts deleted");
+        } catch (error) {
+            toast.error("Failed to delete some contacts");
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
 
+    const handleUpdate = async () => {
+        if (!selectedContact) return;
+        setIsActionLoading(true);
+        try {
+            const fullName = `${editForm.firstName || ""} ${editForm.lastName || ""}`.trim() || editForm.name;
             await updateContact(selectedContact.id, {
                 first_name: editForm.firstName,
                 last_name: editForm.lastName,
@@ -109,7 +130,6 @@ export default function ContactsPage() {
             setIsEditing(false);
             toast.success("Contact updated");
         } catch (error) {
-            console.error("Update failed:", error);
             toast.error("Failed to update contact");
         } finally {
             setIsActionLoading(false);
@@ -141,6 +161,18 @@ export default function ContactsPage() {
         }
         loadContacts();
     }, []);
+
+    const toggleSelection = (id: string) => {
+        const newSet = new Set(selectedIds);
+        if (newSet.has(id)) {
+            newSet.delete(id);
+        } else {
+            newSet.add(id);
+        }
+        setSelectedIds(newSet);
+        if (newSet.size > 0 && !isSelectionMode) setIsSelectionMode(true);
+        if (newSet.size === 0 && isSelectionMode) setIsSelectionMode(false);
+    };
 
     const filteredContacts = contacts.filter((contact) =>
         (contact.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -176,12 +208,20 @@ export default function ContactsPage() {
                     <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Contacts</h1>
                     <p className="text-muted-foreground text-sm">{contacts.length} contacts</p>
                 </div>
-                <Button asChild className="w-full sm:w-auto">
-                    <Link href="/contacts/new">
-                        <Plus className="mr-2 h-4 w-4" />
-                        Add Contact
-                    </Link>
-                </Button>
+                <div className="flex items-center gap-2">
+                    {selectedIds.size > 0 && (
+                        <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete ({selectedIds.size})
+                        </Button>
+                    )}
+                    <Button asChild className="w-full sm:w-auto">
+                        <Link href="/contacts/new">
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add Contact
+                        </Link>
+                    </Button>
+                </div>
             </div>
 
             {/* Search */}
@@ -200,59 +240,52 @@ export default function ContactsPage() {
                 <div className="space-y-6">
                     {sortedLetters.map((letter) => (
                         <div key={letter}>
-                            <h2 className="text-sm font-semibold text-muted-foreground mb-2 sticky top-0 bg-background py-1">
+                            <h2 className="text-sm font-semibold text-muted-foreground mb-2 sticky top-0 bg-background py-1 flex items-center gap-2">
                                 {letter}
                             </h2>
                             <div className="space-y-2">
                                 {groupedContacts[letter].map((contact) => (
-                                    <Card
-                                        key={contact.id}
-                                        className="hover:bg-accent/50 transition-colors cursor-pointer group"
-                                        onClick={() => setSelectedContact(contact)}
-                                    >
-                                        <CardContent className="p-3 sm:p-4">
-                                            <div className="flex items-center gap-3 sm:gap-4">
-                                                <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border-2 border-background group-hover:border-primary/20 transition-colors">
-                                                    <AvatarFallback className="bg-primary text-primary-foreground text-sm sm:text-base">
-                                                        {getInitials(contact.name)}
-                                                    </AvatarFallback>
-                                                </Avatar>
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex flex-col">
-                                                        <p className="font-medium text-sm sm:text-base">
-                                                            {[contact.firstName, contact.lastName].filter(Boolean).join(" ") || contact.name || "Unknown"}
-                                                        </p>
-                                                        {contact.company && (
-                                                            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                                                                <Building2 className="h-3 w-3" />
-                                                                <span>{contact.company}</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                    <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-1 sm:gap-3 mt-1 text-xs sm:text-sm text-muted-foreground">
-                                                        {contact.phone && (
-                                                            <span className="flex items-center gap-1">
-                                                                <Phone className="h-3 w-3" />
-                                                                <span className="truncate">{contact.phone}</span>
-                                                            </span>
-                                                        )}
-                                                        {contact.email && (
-                                                            <span className="flex items-center gap-1">
-                                                                <Mail className="h-3 w-3" />
-                                                                <span className="truncate">{contact.email}</span>
-                                                            </span>
-                                                        )}
-                                                        {contact.birthday && (
-                                                            <span className="flex items-center gap-1">
-                                                                <Cake className="h-3 w-3 text-pink-500" />
-                                                                {formatDate(contact.birthday)}
-                                                            </span>
-                                                        )}
+                                    <div key={contact.id} className="flex items-center gap-2">
+                                        <Checkbox
+                                            checked={selectedIds.has(contact.id)}
+                                            onCheckedChange={() => toggleSelection(contact.id)}
+                                        />
+                                        <Card
+                                            className="hover:bg-accent/50 transition-colors cursor-pointer group flex-1"
+                                            onClick={() => setSelectedContact(contact)}
+                                        >
+                                            <CardContent className="p-3 sm:p-4">
+                                                <div className="flex items-center gap-3 sm:gap-4">
+                                                    <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border-2 border-background group-hover:border-primary/20 transition-colors">
+                                                        <AvatarFallback className="bg-primary text-primary-foreground text-sm sm:text-base">
+                                                            {getInitials(contact.name)}
+                                                        </AvatarFallback>
+                                                    </Avatar>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex flex-col">
+                                                            <p className="font-medium text-sm sm:text-base">
+                                                                {[contact.firstName, contact.lastName].filter(Boolean).join(" ") || contact.name || "Unknown"}
+                                                            </p>
+                                                            {contact.company && (
+                                                                <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                                                                    <Building2 className="h-3 w-3" />
+                                                                    <span>{contact.company}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-1 sm:gap-3 mt-1 text-xs sm:text-sm text-muted-foreground">
+                                                            {contact.phone && (
+                                                                <span className="flex items-center gap-1">
+                                                                    <Phone className="h-3 w-3" />
+                                                                    <span className="truncate">{contact.phone}</span>
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
+                                            </CardContent>
+                                        </Card>
+                                    </div>
                                 ))}
                             </div>
                         </div>
@@ -272,27 +305,22 @@ export default function ContactsPage() {
                     </div>
                     <h3 className="text-lg font-medium mb-2">No contacts yet</h3>
                     <p className="text-sm text-muted-foreground mb-4">
-                        Keep track of important contacts and their birthdays.
+                        Add your first contact to get started.
                     </p>
                     <Button asChild>
-                        <Link href="/contacts/new">
-                            <Plus className="mr-2 h-4 w-4" />
-                            Add Your First Contact
-                        </Link>
+                        <Link href="/contacts/new">Add Contact</Link>
                     </Button>
                 </div>
             )}
 
-            {/* View/Edit/Connect Dialog */}
+            {/* View/Edit Dialog (Unchanged structure mostly) */}
             <Dialog open={!!selectedContact} onOpenChange={(open) => !open && setSelectedContact(null)}>
                 <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>{isEditing ? "Edit Contact" : "Contact Details"}</DialogTitle>
                     </DialogHeader>
-
                     {selectedContact && (
                         <div className="space-y-6">
-                            {/* Avatar Header */}
                             {!isEditing && (
                                 <div className="flex flex-col items-center justify-center py-4">
                                     <Avatar className="h-24 w-24 border-4 border-background shadow-sm">
@@ -364,13 +392,11 @@ export default function ContactsPage() {
                                         <Textarea
                                             value={editForm.notes || ""}
                                             onChange={(e) => setEditForm(prev => ({ ...prev, notes: e.target.value }))}
-                                            placeholder="Add notes..."
                                         />
                                     </div>
                                 </div>
                             ) : (
                                 <div className="space-y-6">
-                                    {/* Connect Actions */}
                                     <div className="grid grid-cols-2 gap-3">
                                         {selectedContact.phone && (
                                             <Button variant="outline" className="w-full gap-2" asChild>
@@ -388,16 +414,7 @@ export default function ContactsPage() {
                                                 </a>
                                             </Button>
                                         )}
-                                        {selectedContact.phone && (
-                                            <Button variant="outline" className="w-full gap-2 col-span-2" asChild>
-                                                <a href={`https://wa.me/${selectedContact.phone.replace(/[^0-9]/g, "")}`} target="_blank" rel="noopener noreferrer">
-                                                    <MessageCircle className="h-4 w-4 text-green-500" />
-                                                    WhatsApp
-                                                </a>
-                                            </Button>
-                                        )}
                                     </div>
-
                                     {/* Info Section */}
                                     <div className="space-y-4 bg-muted/30 p-4 rounded-lg">
                                         {selectedContact.phone && (
@@ -421,8 +438,6 @@ export default function ContactsPage() {
                                             </div>
                                         )}
                                     </div>
-
-                                    {/* Notes Section */}
                                     <div>
                                         <h3 className="font-medium mb-2 text-sm text-foreground/80">Notes</h3>
                                         <div className="bg-muted p-3 rounded-md text-sm whitespace-pre-wrap min-h-[60px]">

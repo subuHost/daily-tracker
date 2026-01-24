@@ -3,16 +3,18 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/utils";
 import {
     Download,
-    FileSpreadsheet,
-    Calendar,
     TrendingUp,
     TrendingDown,
     Target,
     Wallet,
     Loader2,
+    Smile,
+    Calendar as CalendarIcon,
 } from "lucide-react";
 import {
     BarChart,
@@ -24,303 +26,347 @@ import {
     PieChart,
     Pie,
     Cell,
-    LineChart,
-    Line,
 } from "recharts";
 import { toast } from "sonner";
-import { getMonthlyStats, getCategoryBreakdown, getHabits } from "@/lib/db";
+import { getStats, getCategoryBreakdownRange, getHabits, getMoodStats, getInvestments } from "@/lib/db";
+import { startOfMonth, endOfMonth, format, subMonths, startOfYear } from "date-fns";
 
 export default function ReportsPage() {
-    const [period, setPeriod] = useState<"month" | "year">("month");
+    const [dateRange, setDateRange] = useState({
+        start: format(startOfMonth(new Date()), "yyyy-MM-dd"),
+        end: format(new Date(), "yyyy-MM-dd"),
+    });
+
     const [isLoading, setIsLoading] = useState(true);
     const [totalIncome, setTotalIncome] = useState(0);
     const [totalExpenses, setTotalExpenses] = useState(0);
     const [categoryBreakdown, setCategoryBreakdown] = useState<{ name: string; value: number; color: string }[]>([]);
     const [habitData, setHabitData] = useState<{ name: string; completed: number; total: number }[]>([]);
+    const [moodStats, setMoodStats] = useState<{ average: number; breakdown: any[] }>({ average: 0, breakdown: [] });
+    const [portfolioValue, setPortfolioValue] = useState(0);
+
+    const loadReportData = async () => {
+        setIsLoading(true);
+        try {
+            // Fetch financial stats for range
+            const stats = await getStats(dateRange.start, dateRange.end);
+            setTotalIncome(stats.totalIncome);
+            setTotalExpenses(stats.totalExpenses);
+
+            // Fetch category breakdown for range
+            const categories = await getCategoryBreakdownRange(dateRange.start, dateRange.end);
+            setCategoryBreakdown(categories);
+
+            // Fetch habit data (not date ranged yet, usually lifetime or monthly, maybe we iterate later)
+            // For now, habits are lifetime stats in current implementation
+            const habits = await getHabits();
+            const habitStats = habits.map(h => ({
+                name: h.name,
+                completed: h.completedDays,
+                total: Math.max(h.totalDays, 1),
+            }));
+            setHabitData(habitStats.slice(0, 4));
+
+            // Fetch Mood Stats for range
+            const moodData = await getMoodStats(undefined, undefined, dateRange.start, dateRange.end);
+            const moodChartData = Object.entries(moodData.breakdown).map(([rating, count]) => ({
+                name: ["Terrible", "Bad", "Okay", "Good", "Great"][Number(rating) - 1] || "Unknown",
+                value: count,
+                color: ["#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e"][Number(rating) - 1] || "#888888"
+            }));
+            setMoodStats({ average: moodData.average, breakdown: moodChartData });
+
+            // Fetch Portfolio Value (Lifetime)
+            const investments = await getInvestments();
+            const totalValue = investments.reduce((sum, inv) => sum + (inv.buy_price * inv.quantity), 0);
+            setPortfolioValue(totalValue);
+
+        } catch (error) {
+            console.error("Failed to load report data:", error);
+            toast.error("Failed to load reports");
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     useEffect(() => {
-        async function loadReportData() {
-            try {
-                const now = new Date();
-                const month = now.getMonth() + 1;
-                const year = now.getFullYear();
-
-                // Fetch monthly stats
-                const stats = await getMonthlyStats(month, year);
-                setTotalIncome(stats.totalIncome);
-                setTotalExpenses(stats.totalExpenses);
-
-                // Fetch category breakdown
-                const categories = await getCategoryBreakdown(month, year);
-                setCategoryBreakdown(categories);
-
-                // Fetch habit data
-                const habits = await getHabits();
-                const habitStats = habits.map(h => ({
-                    name: h.name,
-                    completed: h.completedDays,
-                    total: Math.min(h.totalDays, 30), // Cap at 30 days for display
-                }));
-                setHabitData(habitStats.slice(0, 4)); // Top 4 habits
-            } catch (error) {
-                console.error("Failed to load report data:", error);
-            } finally {
-                setIsLoading(false);
-            }
-        }
         loadReportData();
-    }, []);
+    }, [dateRange]);
+
+    const handlePresetChange = (preset: string) => {
+        const now = new Date();
+        let start = now;
+        let end = now;
+
+        switch (preset) {
+            case "thisMonth":
+                start = startOfMonth(now);
+                end = now; // to today
+                break;
+            case "lastMonth":
+                start = startOfMonth(subMonths(now, 1));
+                end = endOfMonth(subMonths(now, 1));
+                break;
+            case "thisYear":
+                start = startOfYear(now);
+                end = now;
+                break;
+        }
+        setDateRange({
+            start: format(start, "yyyy-MM-dd"),
+            end: format(end, "yyyy-MM-dd"),
+        });
+    };
 
     const handleExport = (type: string) => {
         toast.success(`Exporting ${type} report as CSV...`);
     };
 
     const savings = totalIncome - totalExpenses;
-    const savingsRate = totalIncome > 0 ? Math.round((savings / totalIncome) * 100) : 0;
-    const hasData = totalIncome > 0 || totalExpenses > 0;
 
-    // Generate monthly expense trend (placeholder - would need historical data)
-    const monthlyExpenses = hasData ? [
-        { month: "This Month", amount: totalExpenses },
-    ] : [];
-
-    if (isLoading) {
-        return (
-            <div className="flex items-center justify-center py-20">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-        );
-    }
+    // Mood Emoji based on average
+    const getMoodEmoji = (avg: number) => {
+        if (avg >= 4.5) return "😄";
+        if (avg >= 3.5) return "🙂";
+        if (avg >= 2.5) return "😐";
+        if (avg >= 1.5) return "😔";
+        return "😢";
+    };
 
     return (
         <div className="space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
+            {/* Header & Controls */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight">Reports</h1>
                     <p className="text-muted-foreground">Analytics and insights</p>
                 </div>
-                <div className="flex gap-2">
-                    <Button
-                        variant={period === "month" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setPeriod("month")}
-                    >
-                        Monthly
-                    </Button>
-                    <Button
-                        variant={period === "year" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setPeriod("year")}
-                    >
-                        Yearly
-                    </Button>
+                <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={() => handlePresetChange("thisMonth")}>This Month</Button>
+                        <Button variant="outline" size="sm" onClick={() => handlePresetChange("lastMonth")}>Last Month</Button>
+                        <Button variant="outline" size="sm" onClick={() => handlePresetChange("thisYear")}>This Year</Button>
+                    </div>
+                    <div className="flex items-center gap-2 bg-muted/50 p-1 rounded-md border">
+                        <CalendarIcon className="h-4 w-4 text-muted-foreground ml-2" />
+                        <Input
+                            type="date"
+                            value={dateRange.start}
+                            onChange={(e) => setDateRange(p => ({ ...p, start: e.target.value }))}
+                            className="h-8 w-32 bg-transparent border-0 focus-visible:ring-0 p-0 text-sm"
+                        />
+                        <span className="text-muted-foreground">-</span>
+                        <Input
+                            type="date"
+                            value={dateRange.end}
+                            onChange={(e) => setDateRange(p => ({ ...p, end: e.target.value }))}
+                            className="h-8 w-32 bg-transparent border-0 focus-visible:ring-0 p-0 text-sm"
+                        />
+                    </div>
                 </div>
             </div>
 
-            {/* Summary Cards */}
-            <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
-                <Card>
-                    <CardContent className="p-4">
-                        <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                            <TrendingUp className="h-4 w-4 text-green-500" />
-                            <span className="text-xs">Income</span>
-                        </div>
-                        <p className="text-xl font-bold text-green-600">
-                            {formatCurrency(totalIncome)}
-                        </p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="p-4">
-                        <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                            <TrendingDown className="h-4 w-4 text-red-500" />
-                            <span className="text-xs">Expenses</span>
-                        </div>
-                        <p className="text-xl font-bold text-red-500">
-                            {formatCurrency(totalExpenses)}
-                        </p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="p-4">
-                        <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                            <Wallet className="h-4 w-4 text-blue-500" />
-                            <span className="text-xs">Savings</span>
-                        </div>
-                        <p className="text-xl font-bold text-blue-500">
-                            {formatCurrency(savings)}
-                        </p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="p-4">
-                        <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                            <Target className="h-4 w-4 text-purple-500" />
-                            <span className="text-xs">Savings Rate</span>
-                        </div>
-                        <p className="text-xl font-bold text-purple-500">{savingsRate}%</p>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Charts Row 1 */}
-            <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
-                {/* Monthly Expenses Trend */}
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between">
-                        <CardTitle className="text-lg">Expense Trend</CardTitle>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleExport("expenses")}
-                        >
-                            <Download className="h-4 w-4 mr-1" />
-                            CSV
-                        </Button>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="h-[250px]">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={monthlyExpenses}>
-                                    <XAxis dataKey="month" axisLine={false} tickLine={false} />
-                                    <YAxis
-                                        axisLine={false}
-                                        tickLine={false}
-                                        tickFormatter={(v) => `₹${v / 1000}k`}
-                                    />
-                                    <Tooltip
-                                        formatter={(v: number) => formatCurrency(v)}
-                                        contentStyle={{
-                                            backgroundColor: "hsl(var(--card))",
-                                            border: "1px solid hsl(var(--border))",
-                                            borderRadius: "8px",
-                                        }}
-                                    />
-                                    <Bar dataKey="amount" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Category Breakdown */}
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between">
-                        <CardTitle className="text-lg">By Category</CardTitle>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleExport("categories")}
-                        >
-                            <Download className="h-4 w-4 mr-1" />
-                            CSV
-                        </Button>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="h-[200px]">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie
-                                        data={categoryBreakdown}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={50}
-                                        outerRadius={80}
-                                        paddingAngle={2}
-                                        dataKey="value"
-                                    >
-                                        {categoryBreakdown.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={entry.color} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip
-                                        formatter={(v: number) => formatCurrency(v)}
-                                        contentStyle={{
-                                            backgroundColor: "hsl(var(--card))",
-                                            border: "1px solid hsl(var(--border))",
-                                            borderRadius: "8px",
-                                        }}
-                                    />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </div>
-                        <div className="grid grid-cols-3 gap-2 mt-2">
-                            {categoryBreakdown.map((cat) => (
-                                <div key={cat.name} className="flex items-center gap-2">
-                                    <div
-                                        className="w-2 h-2 rounded-full"
-                                        style={{ backgroundColor: cat.color }}
-                                    />
-                                    <span className="text-xs text-muted-foreground">{cat.name}</span>
+            {isLoading ? (
+                <div className="flex items-center justify-center py-20">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+            ) : (
+                <>
+                    {/* Summary Cards */}
+                    <div className="grid gap-4 grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
+                        <Card>
+                            <CardContent className="p-4">
+                                <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                                    <TrendingUp className="h-4 w-4 text-green-500" />
+                                    <span className="text-xs">Income</span>
                                 </div>
-                            ))}
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Charts Row 2 */}
-            <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
-                {/* Habit Completion */}
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between">
-                        <CardTitle className="text-lg">Habit Completion</CardTitle>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleExport("habits")}
-                        >
-                            <Download className="h-4 w-4 mr-1" />
-                            CSV
-                        </Button>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-4">
-                            {habitData.map((habit) => (
-                                <div key={habit.name} className="space-y-1">
-                                    <div className="flex justify-between text-sm">
-                                        <span>{habit.name}</span>
-                                        <span className="text-muted-foreground">
-                                            {habit.completed}/{habit.total} ({Math.round((habit.completed / habit.total) * 100)}%)
-                                        </span>
-                                    </div>
-                                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                        <div
-                                            className="h-full bg-green-500 rounded-full"
-                                            style={{ width: `${(habit.completed / habit.total) * 100}%` }}
-                                        />
-                                    </div>
+                                <p className="text-xl font-bold text-green-600">
+                                    {formatCurrency(totalIncome)}
+                                </p>
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardContent className="p-4">
+                                <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                                    <TrendingDown className="h-4 w-4 text-red-500" />
+                                    <span className="text-xs">Expenses</span>
                                 </div>
-                            ))}
-                        </div>
-                    </CardContent>
-                </Card>
+                                <p className="text-xl font-bold text-red-500">
+                                    {formatCurrency(totalExpenses)}
+                                </p>
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardContent className="p-4">
+                                <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                                    <Wallet className="h-4 w-4 text-blue-500" />
+                                    <span className="text-xs">Savings</span>
+                                </div>
+                                <p className="text-xl font-bold text-blue-500">
+                                    {formatCurrency(savings)}
+                                </p>
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardContent className="p-4">
+                                <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                                    <Wallet className="h-4 w-4 text-cyan-500" />
+                                    <span className="text-xs">Portfolio</span>
+                                </div>
+                                <p className="text-xl font-bold text-cyan-600">
+                                    {formatCurrency(portfolioValue)}
+                                </p>
+                            </CardContent>
+                        </Card>
+                        <Card className="col-span-2 md:col-span-1">
+                            <CardContent className="p-4">
+                                <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                                    <Smile className="h-4 w-4 text-yellow-500" />
+                                    <span className="text-xs">Avg Mood</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-2xl">{getMoodEmoji(moodStats.average)}</span>
+                                    <span className="text-lg font-bold">{moodStats.average.toFixed(1)}/5</span>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
 
-                {/* Investment Performance */}
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between">
-                        <CardTitle className="text-lg">Portfolio Value</CardTitle>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleExport("investments")}
-                        >
-                            <Download className="h-4 w-4 mr-1" />
-                            CSV
-                        </Button>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="h-[200px] flex items-center justify-center">
-                            <div className="text-center text-muted-foreground">
-                                <Wallet className="h-12 w-12 mx-auto mb-2 opacity-20" />
-                                <p>No investment data yet</p>
-                                <p className="text-xs mt-1">Add investments to track portfolio</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
+                    {/* Charts Row 1 */}
+                    <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+                        {/* Category Breakdown */}
+                        <Card>
+                            <CardHeader className="flex flex-row items-center justify-between">
+                                <CardTitle className="text-lg">Expenses by Category</CardTitle>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleExport("categories")}
+                                >
+                                    <Download className="h-4 w-4 mr-1" />
+                                    CSV
+                                </Button>
+                            </CardHeader>
+                            <CardContent>
+                                {categoryBreakdown.length > 0 ? (
+                                    <>
+                                        <div className="h-[250px]">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <PieChart>
+                                                    <Pie
+                                                        data={categoryBreakdown}
+                                                        cx="50%"
+                                                        cy="50%"
+                                                        innerRadius={60}
+                                                        outerRadius={90}
+                                                        paddingAngle={2}
+                                                        dataKey="value"
+                                                    >
+                                                        {categoryBreakdown.map((entry, index) => (
+                                                            <Cell key={`cell-${index}`} fill={entry.color} />
+                                                        ))}
+                                                    </Pie>
+                                                    <Tooltip
+                                                        formatter={(v: number) => formatCurrency(v)}
+                                                        contentStyle={{
+                                                            backgroundColor: "hsl(var(--card))",
+                                                            border: "1px solid hsl(var(--border))",
+                                                            borderRadius: "8px",
+                                                        }}
+                                                    />
+                                                </PieChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-2 mt-2">
+                                            {categoryBreakdown.map((cat) => (
+                                                <div key={cat.name} className="flex items-center gap-2">
+                                                    <div
+                                                        className="w-2 h-2 rounded-full"
+                                                        style={{ backgroundColor: cat.color }}
+                                                    />
+                                                    <span className="text-xs text-muted-foreground truncate">{cat.name}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="h-[200px] flex items-center justify-center text-muted-foreground">
+                                        No expenses in this period
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+
+                        {/* Mood Breakdown */}
+                        <Card>
+                            <CardHeader className="flex flex-row items-center justify-between">
+                                <CardTitle className="text-lg">Mood History</CardTitle>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleExport("mood")}
+                                >
+                                    <Download className="h-4 w-4 mr-1" />
+                                    CSV
+                                </Button>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="h-[250px]">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={moodStats.breakdown}>
+                                            <XAxis dataKey="name" axisLine={false} tickLine={false} fontSize={12} />
+                                            <YAxis hide />
+                                            <Tooltip
+                                                cursor={{ fill: 'transparent' }}
+                                                contentStyle={{
+                                                    backgroundColor: "hsl(var(--card))",
+                                                    border: "1px solid hsl(var(--border))",
+                                                    borderRadius: "8px",
+                                                }}
+                                            />
+                                            <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                                                {moodStats.breakdown.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.color} />
+                                                ))}
+                                            </Bar>
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* Charts Row 2 */}
+                    <div className="grid gap-6 grid-cols-1">
+                        {/* Habit Completion */}
+                        <Card>
+                            <CardHeader className="flex flex-row items-center justify-between">
+                                <CardTitle className="text-lg">Habit Consistency (Lifetime)</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-4">
+                                    {habitData.map((habit) => (
+                                        <div key={habit.name} className="space-y-1">
+                                            <div className="flex justify-between text-sm">
+                                                <span>{habit.name}</span>
+                                                <span className="text-muted-foreground">
+                                                    {habit.completed}/{habit.total} days ({Math.round((habit.completed / habit.total) * 100)}%)
+                                                </span>
+                                            </div>
+                                            <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full bg-green-500 rounded-full transition-all duration-500"
+                                                    style={{ width: `${(habit.completed / habit.total) * 100}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </>
+            )}
         </div>
     );
 }
