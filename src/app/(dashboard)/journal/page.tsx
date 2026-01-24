@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -37,7 +37,7 @@ interface DailyEntry {
     voiceNotes: string[];
 }
 
-export default function JournalPage() {
+function JournalContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
 
@@ -472,5 +472,13 @@ export default function JournalPage() {
                 {isSaving ? "Saving..." : "Save Entry"}
             </Button>
         </div>
+    );
+}
+
+export default function JournalPage() {
+    return (
+        <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>}>
+            <JournalContent />
+        </Suspense>
     );
 }
