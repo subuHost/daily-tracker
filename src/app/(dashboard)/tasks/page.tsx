@@ -16,8 +16,10 @@ import {
     Loader2,
 } from "lucide-react";
 import { formatShortDate } from "@/lib/utils";
-import { getTasks, toggleTaskComplete, type Task as DBTask } from "@/lib/db";
+import { getTasks, toggleTaskComplete, deleteTask, type Task as DBTask } from "@/lib/db";
 import { toast } from "sonner";
+import { SwipeableListItem } from "@/components/ui/swipeable-list-item";
+import { useHaptic } from "@/hooks/use-haptic";
 
 interface Task {
     id: string;
@@ -33,6 +35,7 @@ export default function TasksPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [tasks, setTasks] = useState<Task[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const haptic = useHaptic();
 
     // Fetch tasks on mount
     useEffect(() => {
@@ -71,9 +74,22 @@ export default function TasksPage() {
             setTasks(tasks.map((t) =>
                 t.id === id ? { ...t, completed: !t.completed } : t
             ));
+            haptic.triggerSuccess();
         } catch (error) {
             console.error("Failed to toggle task:", error);
             toast.error("Failed to update task");
+        }
+    };
+
+    const handleDeleteTask = async (id: string) => {
+        try {
+            await deleteTask(id);
+            setTasks(tasks.filter(t => t.id !== id));
+            haptic.triggerImpact();
+            toast.success("Task deleted");
+        } catch (error) {
+            console.error("Delete failed:", error);
+            toast.error("Failed to delete task");
         }
     };
 
@@ -86,45 +102,50 @@ export default function TasksPage() {
     };
 
     const TaskCard = ({ task }: { task: Task }) => (
-        <Card
-            className={`hover:bg-accent/50 transition-colors cursor-pointer ${task.completed ? "opacity-60" : ""
-                }`}
-            onClick={() => toggleTask(task.id)}
+        <SwipeableListItem
+            onDelete={() => handleDeleteTask(task.id)}
+            onComplete={() => toggleTask(task.id)}
+            showComplete={!task.completed}
         >
-            <CardContent className="p-3 sm:p-4">
-                <div className="flex items-start gap-3">
-                    <div className="mt-0.5">
-                        {task.completed ? (
-                            <CheckCircle2 className="h-5 w-5 text-green-500" />
-                        ) : (
-                            <Circle className={`h-5 w-5 ${getPriorityColor(task.priority)}`} />
-                        )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <p className={`font-medium text-sm sm:text-base ${task.completed ? "line-through" : ""}`}>
-                            {task.title}
-                        </p>
-                        <div className="flex items-center gap-2 mt-1 flex-wrap">
-                            {task.project && (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                                    {task.project}
-                                </span>
+            <Card
+                className={`transition-colors ${task.completed ? "opacity-60" : ""}`}
+                onClick={() => toggleTask(task.id)}
+            >
+                <CardContent className="p-3 sm:p-4">
+                    <div className="flex items-start gap-3">
+                        <div className="mt-0.5">
+                            {task.completed ? (
+                                <CheckCircle2 className="h-5 w-5 text-green-500" />
+                            ) : (
+                                <Circle className={`h-5 w-5 ${getPriorityColor(task.priority)}`} />
                             )}
-                            {task.dueDate && (
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className={`font-medium text-sm sm:text-base ${task.completed ? "line-through" : ""}`}>
+                                {task.title}
+                            </p>
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                {task.project && (
+                                    <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                                        {task.project}
+                                    </span>
+                                )}
+                                {task.dueDate && (
+                                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                        <Calendar className="h-3 w-3" />
+                                        {formatShortDate(task.dueDate)}
+                                    </span>
+                                )}
                                 <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                    <Calendar className="h-3 w-3" />
-                                    {formatShortDate(task.dueDate)}
+                                    <Flag className={`h-3 w-3 ${getPriorityColor(task.priority)}`} />
+                                    {task.priority}
                                 </span>
-                            )}
-                            <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                <Flag className={`h-3 w-3 ${getPriorityColor(task.priority)}`} />
-                                {task.priority}
-                            </span>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </CardContent>
-        </Card>
+                </CardContent>
+            </Card>
+        </SwipeableListItem>
     );
 
     if (isLoading) {

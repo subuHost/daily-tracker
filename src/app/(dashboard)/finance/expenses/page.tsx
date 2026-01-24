@@ -15,7 +15,10 @@ import {
     Receipt,
     Loader2,
 } from "lucide-react";
-import { getTransactions, type Transaction } from "@/lib/db";
+import { getTransactions, deleteTransaction, type Transaction } from "@/lib/db";
+import { SwipeableListItem } from "@/components/ui/swipeable-list-item";
+import { useHaptic } from "@/hooks/use-haptic";
+import { toast } from "sonner";
 
 interface Expense {
     id: string;
@@ -30,6 +33,7 @@ export default function ExpensesPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [expenses, setExpenses] = useState<Expense[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const haptic = useHaptic();
 
     // Fetch expenses on mount
     useEffect(() => {
@@ -71,6 +75,18 @@ export default function ExpensesPage() {
     );
 
     const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+
+    const handleDeleteExpense = async (id: string) => {
+        try {
+            await deleteTransaction(id);
+            setExpenses(expenses.filter(e => e.id !== id));
+            haptic.triggerImpact();
+            toast.success("Expense deleted");
+        } catch (error) {
+            console.error("Delete failed:", error);
+            toast.error("Failed to delete expense");
+        }
+    };
 
     if (isLoading) {
         return (
@@ -129,36 +145,41 @@ export default function ExpensesPage() {
             {expenses.length > 0 ? (
                 <div className="space-y-3">
                     {filteredExpenses.map((expense) => (
-                        <Card key={expense.id} className="hover:bg-accent/50 transition-colors cursor-pointer">
-                            <CardContent className="p-3 sm:p-4">
-                                <div className="flex items-center justify-between gap-3">
-                                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                                        <div className="p-1.5 sm:p-2 rounded-full bg-red-500/10 shrink-0">
-                                            <ArrowDownRight className="h-3 w-3 sm:h-4 sm:w-4 text-red-500" />
-                                        </div>
-                                        <div className="min-w-0">
-                                            <p className="font-medium text-sm sm:text-base truncate">{expense.description}</p>
-                                            <div className="flex items-center gap-2 mt-0.5">
-                                                <span
-                                                    className="inline-block w-2 h-2 rounded-full shrink-0"
-                                                    style={{ backgroundColor: expense.categoryColor }}
-                                                />
-                                                <span className="text-xs text-muted-foreground truncate">
-                                                    {expense.category}
-                                                </span>
-                                                <span className="text-xs text-muted-foreground">•</span>
-                                                <span className="text-xs text-muted-foreground shrink-0">
-                                                    {formatDate(expense.date)}
-                                                </span>
+                        <SwipeableListItem
+                            key={expense.id}
+                            onDelete={() => handleDeleteExpense(expense.id)}
+                        >
+                            <Card className="hover:bg-accent/50 transition-colors">
+                                <CardContent className="p-3 sm:p-4">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                                            <div className="p-1.5 sm:p-2 rounded-full bg-red-500/10 shrink-0">
+                                                <ArrowDownRight className="h-3 w-3 sm:h-4 sm:w-4 text-red-500" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="font-medium text-sm sm:text-base truncate">{expense.description}</p>
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    <span
+                                                        className="inline-block w-2 h-2 rounded-full shrink-0"
+                                                        style={{ backgroundColor: expense.categoryColor }}
+                                                    />
+                                                    <span className="text-xs text-muted-foreground truncate">
+                                                        {expense.category}
+                                                    </span>
+                                                    <span className="text-xs text-muted-foreground">•</span>
+                                                    <span className="text-xs text-muted-foreground shrink-0">
+                                                        {formatDate(expense.date)}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
+                                        <p className="font-semibold text-red-500 shrink-0 text-sm sm:text-base">
+                                            -{formatCurrency(expense.amount)}
+                                        </p>
                                     </div>
-                                    <p className="font-semibold text-red-500 shrink-0 text-sm sm:text-base">
-                                        -{formatCurrency(expense.amount)}
-                                    </p>
-                                </div>
-                            </CardContent>
-                        </Card>
+                                </CardContent>
+                            </Card>
+                        </SwipeableListItem>
                     ))}
 
                     {filteredExpenses.length === 0 && expenses.length > 0 && (
