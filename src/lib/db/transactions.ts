@@ -11,6 +11,7 @@ export interface Transaction {
     category_color?: string;
     date: string;
     note: string | null;
+    status: "verified" | "needs_review";
     created_at: string;
     updated_at: string;
 }
@@ -22,6 +23,7 @@ export interface TransactionInput {
     category_id?: string | null;
     date: string;
     note?: string | null;
+    status?: "verified" | "needs_review";
 }
 
 // Fetch user's transactions with optional date filtering
@@ -83,6 +85,7 @@ export async function createTransaction(input: TransactionInput): Promise<Transa
             category_id: input.category_id || null,
             date: input.date,
             note: input.note || null,
+            status: input.status || "verified",
         })
         .select()
         .single();
@@ -191,4 +194,47 @@ export async function deleteTransaction(id: string): Promise<void> {
         .eq("user_id", user.id);
 
     if (error) throw error;
+}
+
+// Mark transaction as verified
+export async function verifyTransaction(id: string): Promise<void> {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const { error } = await supabase
+        .from("transactions")
+        .update({ status: "verified" })
+        .eq("id", id)
+        .eq("user_id", user.id);
+
+    if (error) throw error;
+}
+
+// Fetch transactions that need review
+export async function getReviewTransactions(): Promise<Transaction[]> {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const { data, error } = await supabase
+        .from("transactions")
+        .select(`
+            *,
+            categories (
+                name,
+                color
+            )
+        `)
+        .eq("user_id", user.id)
+        .eq("status", "needs_review")
+        .order("date", { ascending: false });
+
+    if (error) throw error;
+
+    return (data || []).map((t: any) => ({
+        ...t,
+        category_name: t.categories?.name || "Uncategorized",
+        category_color: t.categories?.color || "#6b7280",
+    }));
 }

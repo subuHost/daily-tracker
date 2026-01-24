@@ -1,7 +1,7 @@
 import { Sidebar } from "@/components/layout/sidebar";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { Header } from "@/components/layout/header";
-import { QuickAddButton } from "@/components/ui/quick-add-button";
+import { SuperFab } from "@/components/layout/super-fab";
 
 export default function DashboardLayout({
     children,
@@ -24,8 +24,8 @@ export default function DashboardLayout({
             {/* Mobile Navigation */}
             <MobileNav />
 
-            {/* Quick Add FAB */}
-            <QuickAddButton />
+            {/* Super FAB (Speed Dial) */}
+            <SuperFab />
         </div>
     );
 }
