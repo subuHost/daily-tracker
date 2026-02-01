@@ -16,6 +16,7 @@ import {
     Settings,
     LogOut,
     StickyNote,
+    Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ import { useRouter } from "next/navigation";
 
 const navigation = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Health", href: "/health", icon: Activity },
     { name: "Finance", href: "/finance", icon: Wallet },
     { name: "Shopping", href: "/shopping", icon: ShoppingBag },
     { name: "Tasks", href: "/tasks", icon: CheckSquare },

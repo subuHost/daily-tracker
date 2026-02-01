@@ -14,11 +14,13 @@ import {
     Image,
     BarChart3,
     StickyNote,
+    Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navigation = [
     { name: "Home", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Health", href: "/health", icon: Activity },
     { name: "Finance", href: "/finance", icon: Wallet },
     { name: "Tasks", href: "/tasks", icon: CheckSquare },
     { name: "Habits", href: "/habits", icon: Target },
