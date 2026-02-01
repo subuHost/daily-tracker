@@ -46,8 +46,8 @@ export async function getTasks(includeCompleted: boolean = true): Promise<Task[]
 }
 
 // Create a new task
-export async function createTask(input: TaskInput): Promise<Task> {
-    const supabase = createClient();
+export async function createTask(input: TaskInput, supabaseClient?: any): Promise<Task> {
+    const supabase = supabaseClient || createClient();
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Not authenticated");

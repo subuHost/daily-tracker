@@ -113,3 +113,29 @@ export async function deleteShoppingItem(id: string): Promise<void> {
 
     if (error) throw error;
 }
+
+// Update a shopping item
+export async function updateShoppingItem(id: string, input: Partial<ShoppingItemInput>): Promise<ShoppingItem> {
+    const supabase = createClient();
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const { data, error } = await supabase
+        .from("shopping_items")
+        .update({
+            name: input.name,
+            price: input.price,
+            link: input.link,
+            priority: input.priority,
+            comments: input.comments,
+            updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .eq("user_id", user.id)
+        .select()
+        .single();
+
+    if (error) throw error;
+    return data;
+}
