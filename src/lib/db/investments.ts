@@ -128,6 +128,35 @@ export async function deleteInvestment(id: string): Promise<void> {
     if (error) throw error;
 }
 
+// Update an investment
+export async function updateInvestment(id: string, updates: Partial<InvestmentInput> & { current_price?: number }): Promise<Investment> {
+    const supabase = createClient();
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const updateData: Record<string, unknown> = {};
+    if (updates.symbol !== undefined) updateData.symbol = updates.symbol.toUpperCase();
+    if (updates.name !== undefined) updateData.name = updates.name;
+    if (updates.buy_price !== undefined) updateData.buy_price = updates.buy_price;
+    if (updates.quantity !== undefined) updateData.quantity = updates.quantity;
+    if (updates.buy_date !== undefined) updateData.buy_date = updates.buy_date;
+    if (updates.type !== undefined) updateData.type = updates.type;
+    if (updates.note !== undefined) updateData.note = updates.note;
+    if (updates.current_price !== undefined) updateData.current_price = updates.current_price;
+
+    const { data, error } = await supabase
+        .from("investments")
+        .update(updateData)
+        .eq("id", id)
+        .eq("user_id", user.id)
+        .select()
+        .single();
+
+    if (error) throw error;
+    return data;
+}
+
 // Get investment summary
 export async function getInvestmentSummary(): Promise<{
     totalInvested: number;

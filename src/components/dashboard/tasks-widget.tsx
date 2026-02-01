@@ -1,35 +1,39 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle2, Circle, AlertCircle, Plus } from "lucide-react";
+import { CheckCircle2, Circle, AlertCircle, Plus, Loader2 } from "lucide-react";
 import { formatShortDate } from "@/lib/utils";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { getTasks, type Task } from "@/lib/db/tasks";
+import { getBills, type Bill } from "@/lib/db/bills";
 
-interface Task {
-    id: string;
-    title: string;
-    completed: boolean;
-    dueDate?: string;
-    priority: "low" | "medium" | "high";
-}
+export function TasksWidget() {
+    const [tasks, setTasks] = useState<Task[]>([]);
+    const [bills, setBills] = useState<Bill[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-interface Bill {
-    id: string;
-    name: string;
-    amount: number;
-    dueDate: string;
-    isPaid: boolean;
-}
+    useEffect(() => {
+        async function load() {
+            try {
+                const [tasksData, billsData] = await Promise.all([
+                    getTasks(false), // Only incomplete tasks
+                    getBills(),
+                ]);
+                setTasks(tasksData);
+                setBills(billsData);
+            } catch (error) {
+                console.error("Failed to load tasks/bills:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        load();
+    }, []);
 
-interface TasksWidgetProps {
-    tasks?: Task[];
-    bills?: Bill[];
-}
-
-export function TasksWidget({ tasks = [], bills = [] }: TasksWidgetProps) {
-    const incompleteTasks = tasks.filter((t) => !t.completed).slice(0, 3);
-    const upcomingBills = bills.filter((b) => !b.isPaid).slice(0, 2);
+    const incompleteTasks = tasks.slice(0, 3);
+    const upcomingBills = bills.filter((b) => !b.is_paid).slice(0, 2);
     const hasContent = incompleteTasks.length > 0 || upcomingBills.length > 0;
 
     const getPriorityColor = (priority: string) => {
@@ -42,6 +46,36 @@ export function TasksWidget({ tasks = [], bills = [] }: TasksWidgetProps) {
                 return "text-green-500";
         }
     };
+
+    // Calculate next due date for bill
+    const getNextDueDate = (dueDay: number) => {
+        const today = new Date();
+        const currentDay = today.getDate();
+        const currentMonth = today.getMonth();
+        const currentYear = today.getFullYear();
+
+        if (dueDay >= currentDay) {
+            return new Date(currentYear, currentMonth, dueDay);
+        } else {
+            return new Date(currentYear, currentMonth + 1, dueDay);
+        }
+    };
+
+    if (isLoading) {
+        return (
+            <Card className="relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent pointer-events-none" />
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                        Today&apos;s Tasks & Bills
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="py-6 flex justify-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </CardContent>
+            </Card>
+        );
+    }
 
     return (
         <Card className="relative overflow-hidden">
@@ -74,17 +108,20 @@ export function TasksWidget({ tasks = [], bills = [] }: TasksWidgetProps) {
                         {upcomingBills.length > 0 && (
                             <div className="pt-2 border-t space-y-2">
                                 <p className="text-xs text-muted-foreground font-medium">Upcoming Bills</p>
-                                {upcomingBills.map((bill) => (
-                                    <div key={bill.id} className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <AlertCircle className="h-4 w-4 text-amber-500" />
-                                            <span className="text-sm">{bill.name}</span>
+                                {upcomingBills.map((bill) => {
+                                    const nextDue = getNextDueDate(bill.due_date);
+                                    return (
+                                        <div key={bill.id} className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <AlertCircle className="h-4 w-4 text-amber-500" />
+                                                <span className="text-sm">{bill.name}</span>
+                                            </div>
+                                            <span className="text-xs text-muted-foreground">
+                                                {formatShortDate(nextDue.toISOString().split("T")[0])}
+                                            </span>
                                         </div>
-                                        <span className="text-xs text-muted-foreground">
-                                            {formatShortDate(bill.dueDate)}
-                                        </span>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
                     </>
@@ -113,3 +150,4 @@ export function TasksWidget({ tasks = [], bills = [] }: TasksWidgetProps) {
         </Card>
     );
 }
+
