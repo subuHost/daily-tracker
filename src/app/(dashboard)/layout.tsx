@@ -2,6 +2,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { Header } from "@/components/layout/header";
 import { SuperFab } from "@/components/layout/super-fab";
+import { ChatWidget } from "@/components/ai/chat-widget";
 
 export default function DashboardLayout({
     children,
@@ -26,6 +27,9 @@ export default function DashboardLayout({
 
             {/* Super FAB (Speed Dial) */}
             <SuperFab />
+
+            {/* AI Chat Widget */}
+            <ChatWidget />
         </div>
     );
 }
