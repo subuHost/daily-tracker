@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { generateEmbedding } from "@/lib/ai/embeddings";
 
 export interface HealthMetric {
     id: string;
@@ -28,10 +29,18 @@ export interface FoodLog {
 }
 
 // Log a food item
-export async function logFood(input: Partial<FoodLog>): Promise<FoodLog> {
-    const supabase = createClient();
+export async function logFood(input: Partial<FoodLog>, supabaseClient?: any): Promise<FoodLog> {
+    const supabase = supabaseClient || createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Not authenticated");
+
+    // Generate embedding for AI memory
+    let embedding: number[] | null = null;
+    try {
+        embedding = await generateEmbedding(`${input.food_item} ${input.meal_type || ""}`);
+    } catch (e) {
+        console.error("Failed to generate embedding for food log:", e);
+    }
 
     const { data, error } = await supabase
         .from("food_logs")
@@ -45,6 +54,7 @@ export async function logFood(input: Partial<FoodLog>): Promise<FoodLog> {
             protein: input.protein || 0,
             carbs: input.carbs || 0,
             fats: input.fats || 0,
+            embedding: embedding
         })
         .select()
         .single();
@@ -71,8 +81,8 @@ export async function getFoodLogs(date: string): Promise<FoodLog[]> {
 }
 
 // Log/Update health metrics for the day
-export async function logHealthMetrics(input: Partial<HealthMetric> & { date: string }): Promise<HealthMetric> {
-    const supabase = createClient();
+export async function logHealthMetrics(input: Partial<HealthMetric> & { date: string }, supabaseClient?: any): Promise<HealthMetric> {
+    const supabase = supabaseClient || createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Not authenticated");
 
@@ -107,8 +117,8 @@ export async function logHealthMetrics(input: Partial<HealthMetric> & { date: st
 }
 
 // Get health metrics for a date
-export async function getHealthMetrics(date: string): Promise<HealthMetric | null> {
-    const supabase = createClient();
+export async function getHealthMetrics(date: string, supabaseClient?: any): Promise<HealthMetric | null> {
+    const supabase = supabaseClient || createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Not authenticated");
 

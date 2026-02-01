@@ -176,7 +176,91 @@ export async function getCalendarEvents(start: Date, end: Date): Promise<Calenda
         });
     }
 
-    // 6. Fetch Daily Expenses
+    // 7. Fetch Purchased Shopping Items
+    const { data: purchasedItems } = await supabase
+        .from("shopping_items")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("purchased", true)
+        .gte("purchased_date", startDateStr)
+        .lte("purchased_date", endDateStr);
+
+    if (purchasedItems) {
+        purchasedItems.forEach(item => {
+            events.push({
+                id: `shop-${item.id}`,
+                title: `🛍️ Bought: ${item.name}`,
+                date: item.purchased_date,
+                type: "log",
+                color: "#8b5cf6", // violet
+                details: item
+            });
+        });
+    }
+
+    // 8. Fetch Food Logs (Nutrition Summary)
+    const { data: foodLogs } = await supabase
+        .from("food_logs")
+        .select("*")
+        .eq("user_id", user.id)
+        .gte("date", startDateStr)
+        .lte("date", endDateStr);
+
+    if (foodLogs) {
+        const dailyNutrition: Record<string, { kcal: number, protein: number }> = {};
+        foodLogs.forEach(log => {
+            const date = log.date;
+            if (!dailyNutrition[date]) dailyNutrition[date] = { kcal: 0, protein: 0 };
+            dailyNutrition[date].kcal += Number(log.calories) || 0;
+            dailyNutrition[date].protein += Number(log.protein) || 0;
+        });
+
+        Object.entries(dailyNutrition).forEach(([date, data]) => {
+            events.push({
+                id: `nutrition-${date}`,
+                title: `🍴 ${data.kcal} kcal | ${data.protein}g P`,
+                date: date,
+                type: "log",
+                color: "#f97316", // orange
+                details: data
+            });
+        });
+    }
+
+    // 9. Fetch Health Metrics (Weight/Sleep)
+    const { data: healthMetrics } = await supabase
+        .from("health_metrics")
+        .select("*")
+        .eq("user_id", user.id)
+        .gte("date", startDateStr)
+        .lte("date", endDateStr);
+
+    if (healthMetrics) {
+        healthMetrics.forEach(metric => {
+            if (metric.weight) {
+                events.push({
+                    id: `weight-${metric.id}`,
+                    title: `⚖️ Weight: ${metric.weight}kg`,
+                    date: metric.date,
+                    type: "log",
+                    color: "#10b981", // emerald
+                    details: metric
+                });
+            }
+            if (metric.sleep_hours) {
+                events.push({
+                    id: `sleep-${metric.id}`,
+                    title: `😴 Sleep: ${metric.sleep_hours}h`,
+                    date: metric.date,
+                    type: "log",
+                    color: "#6366f1", // indigo
+                    details: metric
+                });
+            }
+        });
+    }
+
+    // 10. Fetch Daily Expenses
     const { data: transactions } = await supabase
         .from("transactions")
         .select("amount, date")

@@ -57,7 +57,7 @@ export function ChatWidget() {
 
             {/* Chat Window */}
             <div className={cn(
-                "fixed bottom-20 left-4 z-50 w-[90vw] md:w-96 transition-all duration-300 ease-in-out origin-bottom-left",
+                "fixed bottom-20 left-4 z-[70] w-[90vw] md:w-96 transition-all duration-300 ease-in-out origin-bottom-left",
                 isOpen ? "scale-100 opacity-100" : "scale-0 opacity-0 pointer-events-none"
             )}>
                 <Card className="h-[500px] flex flex-col shadow-2xl border-blue-500/20">

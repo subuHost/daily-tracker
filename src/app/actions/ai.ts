@@ -67,17 +67,6 @@ const tools = {
             }
         },
         {
-            name: "add_task",
-            description: "Add a new task to the todo list",
-            parameters: {
-                type: SchemaType.OBJECT,
-                properties: {
-                    title: { type: SchemaType.STRING, description: "Task title" }
-                },
-                required: ["title"]
-            }
-        },
-        {
             name: "log_health",
             description: "Log health metrics like weight, sleep, water",
             parameters: {
@@ -89,6 +78,17 @@ const tools = {
                     mood: { type: SchemaType.STRING, description: "Current mood" },
                     notes: { type: SchemaType.STRING, description: "Any health notes" }
                 }
+            }
+        },
+        {
+            name: "search_past_meals",
+            description: "Search the user's past food logs using vector similarity to remember habits or find similar foods.",
+            parameters: {
+                type: SchemaType.OBJECT,
+                properties: {
+                    query: { type: SchemaType.STRING, description: "Description of the food to search for e.g. 'pasta', 'healthy breakfast'" }
+                },
+                required: ["query"]
             }
         }
     ]
@@ -153,30 +153,52 @@ export async function chatWithAI(history: Message[]) {
             let output = {};
             let resultText = "";
 
+            // Create server-side supabase client
+            const { createClient } = await import("@/lib/supabase/server");
+            const supabase = createClient();
+
             if (call.name === "log_food") {
-                await logFood(args);
+                await logFood(args, supabase);
                 resultText = `Logged ${args.food_item} (${args.calories} kcal).`;
                 output = { success: true, message: resultText };
             } else if (call.name === "add_task") {
-                await createTask({ title: args.title });
+                await createTask({ title: args.title }, supabase);
                 resultText = `Added task: "${args.title}".`;
                 output = { success: true, message: resultText };
             } else if (call.name === "log_health") {
-                await logHealthMetrics({ ...args, date: new Date().toISOString().split("T")[0] });
+                await logHealthMetrics({ ...args, date: new Date().toISOString().split("T")[0] }, supabase);
                 resultText = `Health metrics updated.`;
                 output = { success: true, message: resultText };
             } else if (call.name === "track_habit") {
-                const habits = await getHabits();
-                const habit = habits.find(h => h.name.toLowerCase().includes(args.habit_name.toLowerCase()));
+                const habits = await getHabits(supabase);
+                const habit = habits.find((h: any) => h.name.toLowerCase().includes(args.habit_name.toLowerCase()));
 
                 if (habit) {
-                    await toggleHabitToday(habit.id);
+                    await toggleHabitToday(habit.id, supabase);
                     resultText = `Toggled habit "${habit.name}".`;
                     output = { success: true, message: resultText };
                 } else {
                     resultText = `Could not find habit "${args.habit_name}".`;
                     output = { success: false, message: resultText };
                 }
+            } else if (call.name === "search_past_meals") {
+                const { generateEmbedding } = await import("@/lib/ai/embeddings");
+                const vector = await generateEmbedding(args.query);
+
+                const { data: pastMeals, error: searchError } = await supabase.rpc('match_food_logs', {
+                    query_embedding: vector,
+                    match_threshold: 0.5,
+                    match_count: 5
+                });
+
+                if (searchError) throw searchError;
+
+                if (pastMeals && pastMeals.length > 0) {
+                    resultText = `Found ${pastMeals.length} similar meals in your history: ${pastMeals.map((m: any) => m.food_item).join(", ")}.`;
+                } else {
+                    resultText = "I couldn't find any similar meals in your history.";
+                }
+                output = { success: true, results: pastMeals };
             }
 
             // Send function result back to model to get final response

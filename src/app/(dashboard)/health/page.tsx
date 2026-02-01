@@ -10,7 +10,7 @@ import { Activity, Flame, GlassWater, Moon, Scale, Plus, Utensils, Sparkles } fr
 import { getFoodLogs, getHealthMetrics, type FoodLog, type HealthMetric } from "@/lib/db/health";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from "recharts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { logHealthMetrics } from "@/lib/db/health";
+import { logHealthMetrics, logFood } from "@/lib/db/health";
 import { toast } from "sonner";
 
 const COLORS = ["#3b82f6", "#ef4444", "#fbbf24"]; // Protein (Blue), fats (Red), Carbs (Yellow)
@@ -52,6 +52,54 @@ export default function HealthPage() {
         }
     }
 
+    // Manual Food Entry State
+    const [isFoodOpen, setIsFoodOpen] = useState(false);
+    const [manualFood, setManualFood] = useState({
+        food_item: "",
+        quantity: "",
+        calories: "",
+        protein: "",
+        carbs: "",
+        fats: "",
+        meal_type: "snack"
+    });
+
+    const handleManualFoodLog = async () => {
+        if (!manualFood.food_item || !manualFood.calories) {
+            toast.error("Food name and calories are required");
+            return;
+        }
+
+        try {
+            await logFood({
+                date: today,
+                food_item: manualFood.food_item,
+                quantity: manualFood.quantity || "1 serving",
+                calories: parseFloat(manualFood.calories),
+                protein: parseFloat(manualFood.protein) || 0,
+                carbs: parseFloat(manualFood.carbs) || 0,
+                fats: parseFloat(manualFood.fats) || 0,
+                meal_type: manualFood.meal_type
+            });
+
+            toast.success("Food logged successfully");
+            setManualFood({
+                food_item: "",
+                quantity: "",
+                calories: "",
+                protein: "",
+                carbs: "",
+                fats: "",
+                meal_type: "snack"
+            });
+            setIsFoodOpen(false);
+            loadData();
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to log food");
+        }
+    };
+
     const savedMetrics = async () => {
         try {
             await logHealthMetrics({
@@ -88,6 +136,97 @@ export default function HealthPage() {
                     <p className="text-muted-foreground">Track your biometrics and diet</p>
                 </div>
                 <div className="flex gap-2">
+                    <Dialog open={isFoodOpen} onOpenChange={setIsFoodOpen}>
+                        <DialogTrigger asChild>
+                            <Button variant="default">
+                                <Plus className="mr-2 h-4 w-4" />
+                                Log Food
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Log Food Manually</DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-4 py-4">
+                                <div className="space-y-2">
+                                    <Label>Food Name *</Label>
+                                    <Input
+                                        placeholder="e.g. Grilled Chicken Salad"
+                                        value={manualFood.food_item}
+                                        onChange={e => setManualFood({ ...manualFood, food_item: e.target.value })}
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label>Calories (kcal) *</Label>
+                                        <Input
+                                            type="number"
+                                            placeholder="0"
+                                            value={manualFood.calories}
+                                            onChange={e => setManualFood({ ...manualFood, calories: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Quantity</Label>
+                                        <Input
+                                            placeholder="e.g. 1 bowl"
+                                            value={manualFood.quantity}
+                                            onChange={e => setManualFood({ ...manualFood, quantity: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <div className="space-y-2">
+                                        <Label>Protein (g)</Label>
+                                        <Input
+                                            type="number"
+                                            placeholder="0"
+                                            value={manualFood.protein}
+                                            onChange={e => setManualFood({ ...manualFood, protein: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Carbs (g)</Label>
+                                        <Input
+                                            type="number"
+                                            placeholder="0"
+                                            value={manualFood.carbs}
+                                            onChange={e => setManualFood({ ...manualFood, carbs: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Fats (g)</Label>
+                                        <Input
+                                            type="number"
+                                            placeholder="0"
+                                            value={manualFood.fats}
+                                            onChange={e => setManualFood({ ...manualFood, fats: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Meal Type</Label>
+                                    <div className="flex gap-2">
+                                        {["breakfast", "lunch", "dinner", "snack"].map(type => (
+                                            <button
+                                                key={type}
+                                                type="button"
+                                                onClick={() => setManualFood({ ...manualFood, meal_type: type })}
+                                                className={`px-3 py-1.5 rounded-full text-xs font-medium capitalize border transition-colors ${manualFood.meal_type === type
+                                                    ? "bg-primary text-primary-foreground border-primary"
+                                                    : "bg-background hover:bg-accent"
+                                                    }`}
+                                            >
+                                                {type}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <Button onClick={handleManualFoodLog} className="w-full">Save Food Log</Button>
+                            </div>
+                        </DialogContent>
+                    </Dialog>
+
                     <Dialog open={isMetricOpen} onOpenChange={setIsMetricOpen}>
                         <DialogTrigger asChild>
                             <Button variant="outline">
@@ -120,7 +259,7 @@ export default function HealthPage() {
             </div>
 
             {/* Metrics Overview */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <CardTitle className="text-sm font-medium text-muted-foreground">Calories</CardTitle>
@@ -129,6 +268,16 @@ export default function HealthPage() {
                     <CardContent>
                         <div className="text-2xl font-bold">{totalCalories}</div>
                         <p className="text-xs text-muted-foreground">kcal consumed</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                        <CardTitle className="text-sm font-medium text-muted-foreground">Protein</CardTitle>
+                        <div className="h-4 w-4 text-blue-500 font-bold text-xs flex items-center justify-center border border-blue-500 rounded-full">P</div>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{totalProtein}g</div>
+                        <p className="text-xs text-muted-foreground">consumed</p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -222,7 +371,7 @@ export default function HealthPage() {
                         <CardTitle>Food Log</CardTitle>
                         <div className="flex items-center text-sm text-muted-foreground bg-blue-50 text-blue-700 px-3 py-1 rounded-full border border-blue-200">
                             <Sparkles className="h-3 w-3 mr-1" />
-                            Use AI Chat to log food
+                            Use AI or Manual Log
                         </div>
                     </CardHeader>
                     <CardContent>
@@ -233,7 +382,7 @@ export default function HealthPage() {
                         ) : foodLogs.length === 0 ? (
                             <div className="text-center py-10 text-muted-foreground">
                                 <p>No meals logged today</p>
-                                <p className="text-sm mt-1">Try telling the AI: "I ate a sandwich"</p>
+                                <p className="text-sm mt-1">Log your first meal to track calories</p>
                             </div>
                         ) : (
                             <div className="space-y-2">

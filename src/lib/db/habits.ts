@@ -28,8 +28,8 @@ export interface HabitLog {
 }
 
 // Fetch user's habits with stats
-export async function getHabits(): Promise<HabitWithStats[]> {
-    const supabase = createClient();
+export async function getHabits(supabaseClient?: any): Promise<HabitWithStats[]> {
+    const supabase = supabaseClient || createClient();
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Not authenticated");
@@ -46,7 +46,7 @@ export async function getHabits(): Promise<HabitWithStats[]> {
 
     // Fetch logs for all habits
     const today = new Date().toISOString().split("T")[0];
-    const habitIds = habits.map((h) => h.id);
+    const habitIds = habits.map((h: any) => h.id);
 
     const { data: logs, error: logsError } = await supabase
         .from("habit_logs")
@@ -57,16 +57,16 @@ export async function getHabits(): Promise<HabitWithStats[]> {
     if (logsError) throw logsError;
 
     // Calculate stats for each habit
-    return habits.map((habit) => {
-        const habitLogs = (logs || []).filter((l) => l.habit_id === habit.id);
-        const completedToday = habitLogs.some((l) => l.date === today && l.completed);
-        const completedDays = habitLogs.filter((l) => l.completed).length;
+    return habits.map((habit: any) => {
+        const habitLogs = (logs || []).filter((l: any) => l.habit_id === habit.id);
+        const completedToday = habitLogs.some((l: any) => l.date === today && l.completed);
+        const completedDays = habitLogs.filter((l: any) => l.completed).length;
 
         // Calculate streak (consecutive days)
         let streak = 0;
         const sortedLogs = habitLogs
-            .filter((l) => l.completed)
-            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            .filter((l: any) => l.completed)
+            .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
         if (sortedLogs.length > 0) {
             let currentDate = new Date(today);
@@ -93,7 +93,7 @@ export async function getHabits(): Promise<HabitWithStats[]> {
             completedToday,
             completedDays,
             totalDays,
-            recentLogs: habitLogs.map(l => l.date),
+            recentLogs: habitLogs.map((l: any) => l.date),
         };
     });
 }
@@ -127,8 +127,8 @@ export async function createHabit(
 }
 
 // Toggle habit for today
-export async function toggleHabitToday(habitId: string): Promise<boolean> {
-    const supabase = createClient();
+export async function toggleHabitToday(habitId: string, supabaseClient?: any): Promise<boolean> {
+    const supabase = supabaseClient || createClient();
 
     const today = new Date().toISOString().split("T")[0];
 

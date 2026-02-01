@@ -7,6 +7,7 @@ import { NetWorthWidget } from "@/components/dashboard/net-worth-widget";
 import { QuickLinksWidget } from "@/components/dashboard/quick-links-widget";
 import { getCurrentBudget, getMonthlySpent, getTransactions } from "@/lib/db";
 import { EventsWidget } from "@/components/widgets/events-widget";
+import { HealthWidget } from "@/components/dashboard/health-widget";
 import { TransactionReviewStack } from "@/components/dashboard/transaction-review-stack";
 import { getGreeting } from "@/lib/utils";
 import {
@@ -135,15 +136,20 @@ export default function DashboardPage() {
                     <ExpensesWidgetServer />
                 </Suspense>
 
-                {/* Transaction Review Widget */}
-                <div className="md:col-span-1">
-                    <TransactionReviewStack />
-                </div>
+                {/* Health Widget */}
+                <Suspense fallback={<WidgetSkeleton />}>
+                    <HealthWidget />
+                </Suspense>
 
                 {/* Habits Widget */}
                 <Suspense fallback={<HabitsWidgetSkeleton />}>
                     <HabitsWidget />
                 </Suspense>
+
+                {/* Transaction Review Widget */}
+                <div className="md:col-span-1">
+                    <TransactionReviewStack />
+                </div>
 
                 {/* Quick Links - No async, renders immediately */}
                 <QuickLinksWidget />
