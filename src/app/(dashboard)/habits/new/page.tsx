@@ -18,6 +18,7 @@ import { createHabit } from "@/lib/db";
 const habitSchema = z.object({
     name: z.string().min(1, "Habit name is required"),
     icon: z.string().min(1, "Icon is required"),
+    targetDays: z.array(z.number()).min(1, "Select at least one day"),
 });
 
 type HabitForm = z.infer<typeof habitSchema>;
@@ -37,10 +38,21 @@ const iconOptions = [
     { value: "✨", label: "Other" },
 ];
 
+const dayLabels = [
+    { value: 0, label: "S", fullLabel: "Sun" },
+    { value: 1, label: "M", fullLabel: "Mon" },
+    { value: 2, label: "T", fullLabel: "Tue" },
+    { value: 3, label: "W", fullLabel: "Wed" },
+    { value: 4, label: "T", fullLabel: "Thu" },
+    { value: 5, label: "F", fullLabel: "Fri" },
+    { value: 6, label: "S", fullLabel: "Sat" },
+];
+
 export default function NewHabitPage() {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
     const [selectedIcon, setSelectedIcon] = useState("✨");
+    const [selectedDays, setSelectedDays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
 
     const {
         register,
@@ -51,13 +63,22 @@ export default function NewHabitPage() {
         resolver: zodResolver(habitSchema),
         defaultValues: {
             icon: "✨",
+            targetDays: [0, 1, 2, 3, 4, 5, 6],
         },
     });
+
+    const toggleDay = (day: number) => {
+        const newDays = selectedDays.includes(day)
+            ? selectedDays.filter(d => d !== day)
+            : [...selectedDays, day].sort((a, b) => a - b);
+        setSelectedDays(newDays);
+        setValue("targetDays", newDays);
+    };
 
     const onSubmit = async (data: HabitForm) => {
         setIsLoading(true);
         try {
-            await createHabit(data.name, data.icon);
+            await createHabit(data.name, data.icon, "#8b5cf6", data.targetDays);
             toast.success("Habit created successfully!");
             router.push("/habits");
         } catch (error) {
@@ -111,8 +132,8 @@ export default function NewHabitPage() {
                                             setValue("icon", icon.value);
                                         }}
                                         className={`p-3 text-2xl rounded-lg border transition-all ${selectedIcon === icon.value
-                                                ? "border-primary bg-primary/10 scale-110"
-                                                : "border-border hover:bg-accent"
+                                            ? "border-primary bg-primary/10 scale-110"
+                                            : "border-border hover:bg-accent"
                                             }`}
                                         title={icon.label}
                                     >
@@ -122,6 +143,37 @@ export default function NewHabitPage() {
                             </div>
                             {errors.icon && (
                                 <p className="text-sm text-destructive">{errors.icon.message}</p>
+                            )}
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Weekly Schedule</Label>
+                            <p className="text-sm text-muted-foreground">
+                                Select which days to track this habit
+                            </p>
+                            <div className="flex gap-2 justify-between">
+                                {dayLabels.map((day) => (
+                                    <button
+                                        key={day.value}
+                                        type="button"
+                                        onClick={() => toggleDay(day.value)}
+                                        className={`w-10 h-10 rounded-full text-sm font-medium transition-all ${selectedDays.includes(day.value)
+                                                ? "bg-primary text-primary-foreground"
+                                                : "bg-muted text-muted-foreground hover:bg-accent"
+                                            }`}
+                                        title={day.fullLabel}
+                                    >
+                                        {day.label}
+                                    </button>
+                                ))}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                {selectedDays.length === 7
+                                    ? "Every day"
+                                    : `${selectedDays.length} days per week`}
+                            </p>
+                            {errors.targetDays && (
+                                <p className="text-sm text-destructive">{errors.targetDays.message}</p>
                             )}
                         </div>
 

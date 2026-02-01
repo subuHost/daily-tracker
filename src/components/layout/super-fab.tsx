@@ -1,11 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Camera, Mic, Type, Check, X } from "lucide-react";
+import { Plus, DollarSign, ListTodo, Check, X, Loader2 } from "lucide-react";
 import { useHaptic } from "@/hooks/use-haptic";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from "@/components/ui/dialog";
+import { createTransaction } from "@/lib/db/transactions";
+import { createTask } from "@/lib/db/tasks";
+import { getHabits, toggleHabitToday, type HabitWithStats } from "@/lib/db/habits";
 
 interface RadialAction {
     id: string;
@@ -18,69 +31,134 @@ interface RadialAction {
 export function SuperFab() {
     const [isOpen, setIsOpen] = useState(false);
     const haptic = useHaptic();
+    const router = useRouter();
+
+    // Dialog states
+    const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
+    const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+    const [habitDialogOpen, setHabitDialogOpen] = useState(false);
+
+    // Form states
+    const [expenseForm, setExpenseForm] = useState({ amount: "", description: "" });
+    const [taskForm, setTaskForm] = useState({ title: "" });
+    const [habits, setHabits] = useState<HabitWithStats[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
 
     const toggleMenu = () => {
         if (!isOpen) {
             haptic.triggerTap();
         } else {
-            haptic.triggerTap(); // Light tap on close too
+            haptic.triggerTap();
         }
         setIsOpen(!isOpen);
     };
 
-    const handleAction = (label: string, action: () => void) => {
+    const handleAction = (action: () => void) => {
         haptic.triggerSuccess();
         action();
         setIsOpen(false);
     };
 
+    // Load habits when habit dialog opens
+    useEffect(() => {
+        if (habitDialogOpen) {
+            loadHabits();
+        }
+    }, [habitDialogOpen]);
+
+    const loadHabits = async () => {
+        try {
+            const data = await getHabits();
+            setHabits(data);
+        } catch (error) {
+            console.error("Failed to load habits:", error);
+        }
+    };
+
+    const handleQuickExpense = async () => {
+        if (!expenseForm.amount || !expenseForm.description) {
+            toast.error("Please fill in all fields");
+            return;
+        }
+        setIsLoading(true);
+        try {
+            await createTransaction({
+                type: "expense",
+                amount: Number(expenseForm.amount),
+                description: expenseForm.description,
+                date: new Date().toISOString().split("T")[0],
+            });
+            toast.success("Expense added!", { description: `₹${expenseForm.amount} - ${expenseForm.description}` });
+            setExpenseForm({ amount: "", description: "" });
+            setExpenseDialogOpen(false);
+        } catch (error) {
+            console.error("Failed to add expense:", error);
+            toast.error("Failed to add expense");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleQuickTask = async () => {
+        if (!taskForm.title) {
+            toast.error("Please enter a task title");
+            return;
+        }
+        setIsLoading(true);
+        try {
+            await createTask({ title: taskForm.title });
+            toast.success("Task added!", { description: taskForm.title });
+            setTaskForm({ title: "" });
+            setTaskDialogOpen(false);
+        } catch (error) {
+            console.error("Failed to add task:", error);
+            toast.error("Failed to add task");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleToggleHabit = async (habitId: string, habitName: string) => {
+        try {
+            const newState = await toggleHabitToday(habitId);
+            setHabits(habits.map(h =>
+                h.id === habitId ? { ...h, completedToday: newState } : h
+            ));
+            toast.success(newState ? "Habit completed!" : "Habit unmarked", { description: habitName });
+            haptic.triggerSuccess();
+        } catch (error) {
+            console.error("Failed to toggle habit:", error);
+            toast.error("Failed to update habit");
+        }
+    };
+
     const actions: RadialAction[] = [
         {
-            id: "camera",
-            icon: Camera,
-            label: "Scan Receipt",
+            id: "expense",
+            icon: DollarSign,
+            label: "Quick Expense",
             color: "bg-blue-500",
-            onClick: () => toast.info("Camera started", { description: "AI Receipt Scanner ready" }),
+            onClick: () => setExpenseDialogOpen(true),
         },
         {
-            id: "mic",
-            icon: Mic,
-            label: "Voice Log",
-            color: "bg-red-500",
-            onClick: () => toast.info("Listening...", { description: "Whisper AI recording started" }),
-        },
-        {
-            id: "text",
-            icon: Type,
-            label: "Quick Note",
+            id: "task",
+            icon: ListTodo,
+            label: "Quick Task",
             color: "bg-orange-500",
-            onClick: () => toast.info("Note editor opened", { description: "Type your natural language log" }),
+            onClick: () => setTaskDialogOpen(true),
         },
         {
             id: "habit",
             icon: Check,
-            label: "Quick Habit",
+            label: "Log Habit",
             color: "bg-green-500",
-            onClick: () => toast.success("Habit Logged", { description: "Quick habit check-in complete" }),
+            onClick: () => setHabitDialogOpen(true),
         },
     ];
 
-    // Radial position calculations (fan out 90 degrees, top-left direction from bottom-right)
-    // We want them to fan out in an arc.
-    // Let's place them at diverse angles.
-    // 0 is right, 180 is left, 270 is up.
-    // We want angles between 180 (left) and 270 (up).
-    // Let's distribute 4 items: 
-    // Item 1: 270 (Up)
-    // Item 2: 240
-    // Item 3: 210
-    // Item 4: 180 (Left)
-
-    // Distance from center
     const radius = 80;
 
     const getItemVariants = (index: number, total: number) => {
-        // Distribute between 180 and 270 degrees
         const startAngle = 180;
         const endAngle = 270;
         const step = (endAngle - startAngle) / (total - 1);
@@ -138,7 +216,7 @@ export function SuperFab() {
                             className="absolute"
                         >
                             <button
-                                onClick={() => handleAction(action.label, action.onClick)}
+                                onClick={() => handleAction(action.onClick)}
                                 className={cn(
                                     "flex flex-col items-center gap-1 group"
                                 )}
@@ -173,6 +251,112 @@ export function SuperFab() {
                     <span className="sr-only">Toggle Menu</span>
                 </motion.button>
             </div>
+
+            {/* Quick Expense Dialog */}
+            <Dialog open={expenseDialogOpen} onOpenChange={setExpenseDialogOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Quick Expense</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <Input
+                            type="number"
+                            placeholder="Amount (₹)"
+                            value={expenseForm.amount}
+                            onChange={(e) => setExpenseForm(prev => ({ ...prev, amount: e.target.value }))}
+                            autoFocus
+                        />
+                        <Input
+                            placeholder="Description (e.g., Coffee, Uber, Groceries)"
+                            value={expenseForm.description}
+                            onChange={(e) => setExpenseForm(prev => ({ ...prev, description: e.target.value }))}
+                            onKeyDown={(e) => e.key === "Enter" && handleQuickExpense()}
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setExpenseDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={handleQuickExpense} disabled={isLoading}>
+                            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Add Expense
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Quick Task Dialog */}
+            <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Quick Task</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <Input
+                            placeholder="What needs to be done?"
+                            value={taskForm.title}
+                            onChange={(e) => setTaskForm(prev => ({ ...prev, title: e.target.value }))}
+                            onKeyDown={(e) => e.key === "Enter" && handleQuickTask()}
+                            autoFocus
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setTaskDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={handleQuickTask} disabled={isLoading}>
+                            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Add Task
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Habit Toggle Dialog */}
+            <Dialog open={habitDialogOpen} onOpenChange={setHabitDialogOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Today&apos;s Habits</DialogTitle>
+                    </DialogHeader>
+                    <div className="py-4">
+                        {habits.length > 0 ? (
+                            <div className="space-y-2 max-h-64 overflow-y-auto">
+                                {habits.map((habit) => (
+                                    <button
+                                        key={habit.id}
+                                        onClick={() => handleToggleHabit(habit.id, habit.name)}
+                                        className={cn(
+                                            "w-full flex items-center gap-3 p-3 rounded-lg border transition-all",
+                                            habit.completedToday
+                                                ? "bg-green-500/10 border-green-500/50"
+                                                : "hover:bg-accent/50"
+                                        )}
+                                    >
+                                        <span className="text-2xl">{habit.icon}</span>
+                                        <span className="flex-1 text-left font-medium">{habit.name}</span>
+                                        <div className={cn(
+                                            "p-1 rounded-full",
+                                            habit.completedToday
+                                                ? "bg-green-500 text-white"
+                                                : "bg-muted"
+                                        )}>
+                                            {habit.completedToday ? (
+                                                <Check className="h-4 w-4" />
+                                            ) : (
+                                                <X className="h-4 w-4 text-muted-foreground" />
+                                            )}
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-center text-muted-foreground py-4">
+                                No habits yet. Create one in the Habits section.
+                            </p>
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setHabitDialogOpen(false)}>Done</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }
+

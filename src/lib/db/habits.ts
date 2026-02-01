@@ -6,7 +6,7 @@ export interface Habit {
     name: string;
     icon: string | null;
     color: string;
-    target_days: number;
+    target_days: number[]; // Array of days 0-6 (Sun-Sat) when habit should be tracked
     created_at: string;
 }
 
@@ -99,7 +99,12 @@ export async function getHabits(): Promise<HabitWithStats[]> {
 }
 
 // Create a new habit
-export async function createHabit(name: string, icon: string = "✨", color: string = "#8b5cf6"): Promise<Habit> {
+export async function createHabit(
+    name: string,
+    icon: string = "✨",
+    color: string = "#8b5cf6",
+    targetDays: number[] = [0, 1, 2, 3, 4, 5, 6] // Default: all days
+): Promise<Habit> {
     const supabase = createClient();
 
     const { data: { user } } = await supabase.auth.getUser();
@@ -112,7 +117,7 @@ export async function createHabit(name: string, icon: string = "✨", color: str
             name,
             icon,
             color,
-            target_days: 7,
+            target_days: targetDays,
         })
         .select()
         .single();
@@ -160,7 +165,7 @@ export async function toggleHabitToday(habitId: string): Promise<boolean> {
 }
 
 // Update a habit
-export async function updateHabit(id: string, updates: { name?: string; icon?: string; color?: string; target_days?: number }): Promise<Habit> {
+export async function updateHabit(id: string, updates: { name?: string; icon?: string; color?: string; target_days?: number[] }): Promise<Habit> {
     const supabase = createClient();
 
     const { data: { user } } = await supabase.auth.getUser();

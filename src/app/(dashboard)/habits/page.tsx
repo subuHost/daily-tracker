@@ -42,8 +42,18 @@ export default function HabitsPage() {
     // Edit/Delete State
     const [editingHabit, setEditingHabit] = useState<HabitWithStats | null>(null);
     const [isEditOpen, setIsEditOpen] = useState(false);
-    const [editForm, setEditForm] = useState({ name: "", icon: "✨" });
+    const [editForm, setEditForm] = useState({ name: "", icon: "✨", targetDays: [0, 1, 2, 3, 4, 5, 6] as number[] });
     const [isActionLoading, setIsActionLoading] = useState(false);
+
+    const dayLabels = [
+        { value: 0, label: "S", fullLabel: "Sun" },
+        { value: 1, label: "M", fullLabel: "Mon" },
+        { value: 2, label: "T", fullLabel: "Tue" },
+        { value: 3, label: "W", fullLabel: "Wed" },
+        { value: 4, label: "T", fullLabel: "Thu" },
+        { value: 5, label: "F", fullLabel: "Fri" },
+        { value: 6, label: "S", fullLabel: "Sat" },
+    ];
 
     // Fetch habits on mount
     useEffect(() => {
@@ -83,8 +93,16 @@ export default function HabitsPage() {
 
     const handleEditClick = (habit: HabitWithStats) => {
         setEditingHabit(habit);
-        setEditForm({ name: habit.name, icon: habit.icon || "✨" });
+        const targetDays = Array.isArray(habit.target_days) ? habit.target_days : [0, 1, 2, 3, 4, 5, 6];
+        setEditForm({ name: habit.name, icon: habit.icon || "✨", targetDays });
         setIsEditOpen(true);
+    };
+
+    const toggleEditDay = (day: number) => {
+        const newDays = editForm.targetDays.includes(day)
+            ? editForm.targetDays.filter(d => d !== day)
+            : [...editForm.targetDays, day].sort((a, b) => a - b);
+        setEditForm(prev => ({ ...prev, targetDays: newDays }));
     };
 
     const handleUpdate = async () => {
@@ -94,11 +112,12 @@ export default function HabitsPage() {
             await updateHabit(editingHabit.id, {
                 name: editForm.name,
                 icon: editForm.icon,
+                target_days: editForm.targetDays,
             });
 
             setHabits(habits.map(h =>
                 h.id === editingHabit.id
-                    ? { ...h, name: editForm.name, icon: editForm.icon }
+                    ? { ...h, name: editForm.name, icon: editForm.icon, target_days: editForm.targetDays }
                     : h
             ));
 
@@ -307,6 +326,30 @@ export default function HabitsPage() {
                                 maxLength={2}
                                 className="w-16 text-center text-2xl"
                             />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Weekly Schedule</Label>
+                            <div className="flex gap-1.5 justify-between">
+                                {dayLabels.map((day) => (
+                                    <button
+                                        key={day.value}
+                                        type="button"
+                                        onClick={() => toggleEditDay(day.value)}
+                                        className={`w-9 h-9 rounded-full text-sm font-medium transition-all ${editForm.targetDays.includes(day.value)
+                                                ? "bg-primary text-primary-foreground"
+                                                : "bg-muted text-muted-foreground hover:bg-accent"
+                                            }`}
+                                        title={day.fullLabel}
+                                    >
+                                        {day.label}
+                                    </button>
+                                ))}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                {editForm.targetDays.length === 7
+                                    ? "Every day"
+                                    : `${editForm.targetDays.length} days per week`}
+                            </p>
                         </div>
                     </div>
                     <DialogFooter>
