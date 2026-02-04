@@ -4,16 +4,12 @@ import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import { logFood, logHealthMetrics, getHealthMetrics, type FoodLog } from "@/lib/db/health";
 import { getHabits, toggleHabitToday } from "@/lib/db/habits";
 import { createTask } from "@/lib/db/tasks";
-
-// Initialize Gemini client
-// Note: This requires GEMINI_API_KEY in .env.local
-const genAI = process.env.GEMINI_API_KEY
-    ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
-    : null;
+import { getGeminiClient, hasApiKeys } from "@/lib/ai/gemini-client";
 
 export interface Message {
     role: "user" | "assistant" | "system";
     content: string;
+    imageBase64?: string; // Optional base64 image for vision
 }
 
 const SYSTEM_PROMPT = `You are a helpful and intelligent AI assistant for the "Daily Tracker" app.
@@ -130,11 +126,13 @@ const tools = {
 };
 
 export async function chatWithAI(history: Message[]) {
+    const genAI = getGeminiClient();
+
     if (!genAI) {
         console.error("Gemini API Key missing");
         return {
             role: "assistant",
-            content: "I'm sorry, but the Gemini API key is not configured. Please add GEMINI_API_KEY to your .env.local file."
+            content: "I'm sorry, but no Gemini API keys are configured. Please add GEMINI_API_KEY to your .env.local file."
         };
     }
 
@@ -286,3 +284,170 @@ export async function chatWithAI(history: Message[]) {
         };
     }
 }
+
+/**
+ * Analyze a food image and log it to the database.
+ * Uses Gemini's vision capabilities to identify food and estimate nutrition.
+ * Includes retry logic with key rotation on quota errors.
+ */
+export async function analyzeAndLogFoodImage(
+    imageBase64: string,
+    mimeType: string = "image/jpeg",
+    mealType?: "breakfast" | "lunch" | "dinner" | "snack"
+): Promise<{ success: boolean; message: string; foods?: any[] }> {
+    const { markKeyFailed, getCurrentKey, getKeyCount } = await import("@/lib/ai/gemini-client");
+
+    const maxRetries = Math.min(getKeyCount(), 3); // Try up to 3 different keys
+    let lastError: any = null;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const genAI = getGeminiClient();
+
+        if (!genAI) {
+            return {
+                success: false,
+                message: "No Gemini API keys are configured. Please add GEMINI_API_KEY to your .env.local file."
+            };
+        }
+
+        try {
+            const model = genAI.getGenerativeModel({
+                model: "gemini-flash-latest",
+            });
+
+            // Determine meal type based on current time if not provided
+            const currentHour = new Date().getHours();
+            const autoMealType = mealType || (
+                currentHour < 11 ? "breakfast" :
+                    currentHour < 15 ? "lunch" :
+                        currentHour < 20 ? "dinner" : "snack"
+            );
+
+            const prompt = `You are an expert nutritionist analyzing a food image.
+
+Identify ALL food items visible in this image and provide detailed nutritional estimates.
+
+For EACH food item, provide:
+1. Food name (be specific, e.g., "grilled chicken breast" not just "chicken")
+2. Estimated quantity/portion size
+3. Calories (as an integer)
+4. Protein in grams (as an integer)
+5. Carbs in grams (as an integer)
+6. Fats in grams (as an integer)
+
+Respond in this exact JSON format:
+{
+    "foods": [
+        {
+            "food_item": "food name",
+            "quantity": "portion description",
+            "calories": 250,
+            "protein": 20,
+            "carbs": 15,
+            "fats": 10
+        }
+    ],
+    "summary": "Brief description of the meal"
+}
+
+Be accurate with Indian foods, international cuisines, and common dishes.
+If you cannot identify the food clearly, make your best estimate based on visual cues.
+Always provide integer values for nutritional data.`;
+
+            const result = await model.generateContent([
+                { text: prompt },
+                {
+                    inlineData: {
+                        mimeType: mimeType,
+                        data: imageBase64
+                    }
+                }
+            ]);
+
+            const response = result.response;
+            const text = response.text();
+
+            // Parse the JSON response
+            let parsed;
+            try {
+                // Extract JSON from the response (handle markdown code blocks)
+                const jsonMatch = text.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    parsed = JSON.parse(jsonMatch[0]);
+                } else {
+                    throw new Error("No JSON found in response");
+                }
+            } catch (parseError) {
+                console.error("Failed to parse AI response:", text);
+                return {
+                    success: false,
+                    message: "Could not parse the food analysis. Please try again with a clearer image."
+                };
+            }
+
+            // Log each food item to the database
+            const { createClient } = await import("@/lib/supabase/server");
+            const supabase = createClient();
+
+            const loggedFoods: any[] = [];
+
+            for (const food of parsed.foods || []) {
+                const foodData = {
+                    food_item: food.food_item,
+                    quantity: food.quantity,
+                    calories: Math.round(food.calories || 0),
+                    protein: Math.round(food.protein || 0),
+                    carbs: Math.round(food.carbs || 0),
+                    fats: Math.round(food.fats || 0),
+                    meal_type: autoMealType
+                };
+
+                await logFood(foodData, supabase);
+                loggedFoods.push(foodData);
+            }
+
+            // Create a summary message
+            const totalCalories = loggedFoods.reduce((sum, f) => sum + f.calories, 0);
+            const totalProtein = loggedFoods.reduce((sum, f) => sum + f.protein, 0);
+
+            const foodNames = loggedFoods.map(f => f.food_item).join(", ");
+            const message = loggedFoods.length > 0
+                ? `📸 Logged ${loggedFoods.length} item(s): ${foodNames}\n\n📊 Total: ${totalCalories} kcal, ${totalProtein}g protein\n\n${parsed.summary || ""}`
+                : "Could not identify any food items in the image. Please try with a clearer photo.";
+
+            return {
+                success: loggedFoods.length > 0,
+                message,
+                foods: loggedFoods
+            };
+
+        } catch (error: any) {
+            lastError = error;
+            console.error(`Food image analysis error (attempt ${attempt + 1}/${maxRetries}):`, error);
+
+            // Check if it's a quota/rate limit error (429)
+            if (error.status === 429 || error.message?.includes('429') || error.message?.includes('quota')) {
+                // Mark this key as failed so it's skipped temporarily
+                const failedKey = getCurrentKey();
+                if (failedKey) {
+                    markKeyFailed(failedKey);
+                    console.log(`Marked key as failed, will try another key...`);
+                }
+
+                // Small delay before retry
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                continue; // Try next key
+            }
+
+            // For non-quota errors, don't retry
+            break;
+        }
+    }
+
+    // All retries failed
+    return {
+        success: false,
+        message: `Error analyzing image: ${lastError?.message || "All API keys are exhausted. Please try again in a minute."}`
+    };
+}
+
