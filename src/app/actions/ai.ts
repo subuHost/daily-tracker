@@ -21,14 +21,22 @@ Your goal is to assist the user with a wide range of tasks, including tracking h
 You can also answer general questions, provide advice, and chat casually.
 
 You have access to specific tools to perform actions in the app.
-ALWAYS use tools when the user expressly asks to perform an action like "log food", "add task", "track habit", or "log health stats".
+ALWAYS use tools when the user expressly asks to perform an action like "log food", "add task", "track habit", "log health stats", or "log expense".
 
 For food logging:
 - You are a knowledgeable nutritionist.
-- If the user provides a food name but no details, estimate the calories and macros (protein, carbs, fats).
+- ALWAYS estimate and provide all details: calories, protein, carbs, and fats.
+- If the user provides a food name but no details, estimate based on standard portions.
+- Ensure all nutritional values (calories, protein, carbs, fats) are provided as INTEGERS.
 
 For habits:
 - Find the habit by name.
+
+For tasks:
+- Assist in creating tasks with titles and optional priorities.
+
+For finances:
+- Help users log expenses or income by providing the amount and a description.
 
 If you don't have enough information for a tool, ask for clarification.
 If the user asks a general question (e.g., "How do I make pasta?", "Tell me a joke"), answer it directly without using tools.
@@ -78,6 +86,33 @@ const tools = {
                     mood: { type: SchemaType.STRING, description: "Current mood" },
                     notes: { type: SchemaType.STRING, description: "Any health notes" }
                 }
+            }
+        },
+        {
+            name: "add_task",
+            description: "Create a new task for the user.",
+            parameters: {
+                type: SchemaType.OBJECT,
+                properties: {
+                    title: { type: SchemaType.STRING, description: "Title of the task" },
+                    priority: { type: SchemaType.STRING, enum: ["low", "medium", "high"], description: "Priority level" },
+                    due_date: { type: SchemaType.STRING, description: "Optional due date (YYYY-MM-DD)" }
+                },
+                required: ["title"]
+            }
+        },
+        {
+            name: "log_expense",
+            description: "Log a financial expense or income transaction.",
+            parameters: {
+                type: SchemaType.OBJECT,
+                properties: {
+                    amount: { type: SchemaType.NUMBER, description: "Amount of the transaction" },
+                    description: { type: SchemaType.STRING, description: "What the transaction was for" },
+                    transaction_type: { type: SchemaType.STRING, enum: ["expense", "income"], description: "Whether it's an 'expense' or 'income'" },
+                    category: { type: SchemaType.STRING, description: "Optional category name (e.g. 'Food', 'Transport')" }
+                },
+                required: ["amount", "description", "transaction_type"]
             }
         },
         {
@@ -158,12 +193,40 @@ export async function chatWithAI(history: Message[]) {
             const supabase = createClient();
 
             if (call.name === "log_food") {
-                await logFood(args, supabase);
-                resultText = `Logged ${args.food_item} (${args.calories} kcal).`;
+                // Fix integer issue: ensure all numeric values are integers
+                const foodData = {
+                    ...args,
+                    calories: Math.round(args.calories || 0),
+                    protein: Math.round(args.protein || 0),
+                    carbs: Math.round(args.carbs || 0),
+                    fats: Math.round(args.fats || 0)
+                };
+                await logFood(foodData, supabase);
+                resultText = `Logged ${args.food_item} (${foodData.calories} kcal, ${foodData.protein}g protein).`;
                 output = { success: true, message: resultText };
             } else if (call.name === "add_task") {
-                await createTask({ title: args.title }, supabase);
-                resultText = `Added task: "${args.title}".`;
+                const { createTask } = await import("@/lib/db/tasks");
+                await createTask(args, supabase);
+                resultText = `Added task: "${args.title}"${args.priority ? ` with ${args.priority} priority` : ""}.`;
+                output = { success: true, message: resultText };
+            } else if (call.name === "log_expense") {
+                const { createTransaction } = await import("@/lib/db/transactions");
+                const { getOrCreateCategory } = await import("@/lib/db/categories");
+
+                let categoryId = null;
+                if (args.category) {
+                    const category = await getOrCreateCategory(args.category, args.transaction_type);
+                    categoryId = category.id;
+                }
+
+                await createTransaction({
+                    type: args.transaction_type as "expense" | "income",
+                    amount: args.amount,
+                    description: args.description,
+                    category_id: categoryId,
+                    date: new Date().toISOString().split("T")[0]
+                });
+                resultText = `Logged ${args.transaction_type}: "${args.description}" for ${args.amount}.`;
                 output = { success: true, message: resultText };
             } else if (call.name === "log_health") {
                 await logHealthMetrics({ ...args, date: new Date().toISOString().split("T")[0] }, supabase);
