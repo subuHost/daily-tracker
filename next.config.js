@@ -8,6 +8,12 @@ const nextConfig = {
             },
         ],
     },
+    // Increase server action body size limit for image uploads
+    experimental: {
+        serverActions: {
+            bodySizeLimit: '4mb',
+        },
+    },
 };
 
 module.exports = nextConfig;
