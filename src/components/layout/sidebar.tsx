@@ -17,6 +17,7 @@ import {
     LogOut,
     StickyNote,
     Activity,
+    GraduationCap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ const navigation = [
     { name: "Contacts", href: "/contacts", icon: Users },
     { name: "Gallery", href: "/gallery", icon: Image },
     { name: "Notepad", href: "/notepad", icon: StickyNote },
+    { name: "Study", href: "/study", icon: GraduationCap },
     { name: "Reports", href: "/reports", icon: BarChart3 },
 ];
 
