@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 export type TopicCategory = 'DSA' | 'SystemDesign';
 export type ProblemDifficulty = 'Easy' | 'Medium' | 'Hard';
 export type AttemptOutcome = 'Solved' | 'Failed' | 'Hint_Used';
-export type CaseStatus = 'Draft' | 'Review' | 'Mastered';
+export type CaseStatus = 'To_Study' | 'Drafting' | 'Reviewing' | 'Mastered';
 
 export interface StudyTopic {
     id: string;
@@ -62,13 +62,18 @@ export interface SystemDesignCase {
     user_id: string;
     title: string;
     status: CaseStatus;
-    content_json: {
-        requirements?: string;
-        estimation?: string;
-        diagram_url?: string;
-        deep_dive?: string;
-        trade_offs?: string;
-    };
+
+    youtube_url: string | null;
+    requirements_functional: string | null;
+    requirements_non_functional: string | null;
+    estimations: string | null;
+    architecture_image_url: string | null;
+    component_selection: string | null;
+    deep_dive_notes: string | null;
+    trade_offs: string | null;
+
+    is_completed: boolean;
+    completion_date: string | null;
     created_at: string;
 }
 

@@ -325,6 +325,14 @@ export async function logAttemptAction(
 }
 
 export async function saveSystemDesignCaseAction(caseId: string | undefined, data: Partial<SystemDesignCase>) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    await saveSystemDesignCase({
+        ...data,
+        id: caseId
+    }, supabase); // Pass the authenticated client
     await saveSystemDesignCase({
         ...data,
         id: caseId
@@ -344,6 +352,61 @@ export async function toggleProblemCompletionAction(id: string, completed: boole
 
     if (error) throw error;
     revalidatePath("/study");
+}
+
+export async function deleteProblemAction(id: string) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const { error } = await supabase
+        .from('problems')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+    if (error) throw error;
+    revalidatePath("/study");
+}
+
+export async function importProblemsAction(formData: FormData) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const file = formData.get("file") as File;
+    if (!file) throw new Error("No file uploaded");
+
+    const text = await file.text();
+    const lines = text.split("\n").filter(l => l.trim().length > 0);
+    // const headers = lines[0].split(","); // Not strictly using headers for mapping to keep it simple as per dialog hint
+
+    let importedCount = 0;
+
+    for (let i = 1; i < lines.length; i++) {
+        const row = lines[i].split(",").map(c => c.trim());
+        if (row.length < 2) continue;
+
+        // 0:num, 1:title, 2:diff, 3:lc, 4:gfg, 5:topic, 6:companies, 7:freq
+        const problem: Partial<any> = {
+            user_id: user.id,
+            question_number: parseInt(row[0]) || null,
+            title: row[1]?.replace(/^"|"$/g, '') || "Untitled",
+            difficulty: row[2] || "Medium",
+            link: row[3] || null,
+            link_gfg: row[4] || null,
+            topic_category: row[5] || null,
+            companies: row[6]?.split('|').join(', ') || null,
+            frequency_score: parseInt(row[7]) || 0,
+            srs_bucket: 0
+        };
+
+        const { error } = await supabase.from('problems').insert(problem);
+        if (!error) importedCount++;
+    }
+
+    revalidatePath("/study");
+    return { success: true, count: importedCount };
 }
 
 export async function updateProblemAction(id: string, formData: FormData) {
