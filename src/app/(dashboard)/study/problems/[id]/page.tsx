@@ -33,6 +33,14 @@ export default function ProblemReviewPage({ params }: { params: { id: string } }
 
     useEffect(() => {
         async function fetchProblem() {
+            // Validate UUID to prevent Postgres errors for non-UUID routes/params
+            const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.id);
+            if (!isValidUUID) {
+                console.warn("Invalid ID passed to problem page:", params.id);
+                setLoading(false);
+                return;
+            }
+
             const { data, error } = await supabase.from('problems').select('*').eq('id', params.id).single();
             if (data) setProblem(data as Problem);
             setLoading(false);
@@ -52,6 +60,18 @@ export default function ProblemReviewPage({ params }: { params: { id: string } }
         } finally {
             setSubmitting(false);
         }
+    }
+
+    function getPlatformName(p: Problem) {
+        if (p.link?.toLowerCase().includes('leetcode')) return "LeetCode";
+        if (p.link_gfg) return "GeeksForGeeks";
+        return "the platform";
+    }
+
+    function getPlatformLink(p: Problem) {
+        if (p.link?.toLowerCase().includes('leetcode')) return p.link;
+        if (p.link_gfg) return p.link_gfg;
+        return p.link;
     }
 
     if (loading) return <div className="p-8">Loading problem context...</div>;
@@ -85,7 +105,17 @@ export default function ProblemReviewPage({ params }: { params: { id: string } }
                         for now relying on user opening External Link */}
                     <div className="bg-card border p-6 rounded-lg text-center my-8">
                         <p className="text-muted-foreground mb-4">
-                            Solve this problem on {problem.platform || "the platform"} then log your result.
+                            Solve this problem on {getPlatformLink(problem) ? (
+                                <Link
+                                    href={getPlatformLink(problem)!}
+                                    target="_blank"
+                                    className="font-medium text-primary hover:underline hover:text-primary/80 transition-colors"
+                                >
+                                    {getPlatformName(problem)}
+                                </Link>
+                            ) : (
+                                getPlatformName(problem)
+                            )} then log your result.
                         </p>
                         {problem.link && (
                             <Link href={problem.link} target="_blank" className="font-medium text-primary hover:underline">
@@ -200,6 +230,6 @@ export default function ProblemReviewPage({ params }: { params: { id: string } }
                     </div>
                 </div>
             </div>
-        </div>
+        </div >
     );
 }

@@ -58,7 +58,7 @@ export default async function SystemDesignPage() {
                             <CardContent>
                                 <div className="text-sm text-muted-foreground line-clamp-3">
                                     {/* Show preview of requirements or content if available */}
-                                    {c.content_json?.requirements || "No requirements defined yet."}
+                                    {c.requirements_functional || "No requirements defined yet."}
                                 </div>
                             </CardContent>
                             <CardFooter>
