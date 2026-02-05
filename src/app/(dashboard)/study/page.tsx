@@ -5,12 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ExternalLink, GraduationCap, CheckCircle2, Youtube, Flame } from "lucide-react";
+import { ExternalLink, GraduationCap, CheckCircle2, Youtube, Flame, Plus } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ProblemRow } from "@/components/study/dsa-sheet/problem-row";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProblemsTable } from "@/components/study/dsa-sheet/problems-table";
+import { ImportProblemsDialog } from "@/components/study/dsa-sheet/import-problems-dialog";
 
 export default async function StudyDashboard() {
     const supabase = await createClient();
@@ -43,12 +44,18 @@ export default async function StudyDashboard() {
 
     return (
         <div className="h-full flex flex-col space-y-6 overflow-hidden p-4 md:p-8">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shrink-0">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">DSA Sheet</h1>
                     <p className="text-muted-foreground">Progress: {percentage}% ({completed}/{total})</p>
                 </div>
                 <div className="flex gap-2">
+                    <ImportProblemsDialog />
+                    <Link href="/study/problems/new">
+                        <Button className="gap-2">
+                            <Plus className="h-4 w-4" /> Add Problem
+                        </Button>
+                    </Link>
                     <Link href="/study/system-design">
                         <Button variant="outline">System Design</Button>
                     </Link>
