@@ -15,6 +15,7 @@ import {
     BarChart3,
     StickyNote,
     Activity,
+    GraduationCap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +24,7 @@ const navigation = [
     { name: "Health", href: "/health", icon: Activity },
     { name: "Finance", href: "/finance", icon: Wallet },
     { name: "Tasks", href: "/tasks", icon: CheckSquare },
+    { name: "Study", href: "/study", icon: GraduationCap },
     { name: "Habits", href: "/habits", icon: Target },
     { name: "Calendar", href: "/calendar", icon: Calendar },
     { name: "Journal", href: "/journal", icon: BookOpen },
