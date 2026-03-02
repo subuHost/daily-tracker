@@ -8,22 +8,23 @@ export interface ChatMessage {
     created_at: string;
 }
 
-// Fetch chat history for the current user, ordered oldest-first
+// Fetch the latest N chat messages for the current user, returned in chronological order
 export async function getChatHistory(supabaseClient?: any, limit: number = 50): Promise<ChatMessage[]> {
     const supabase = supabaseClient || createClient();
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Not authenticated");
 
+    // Fetch newest N rows first, then reverse so callers get chronological order
     const { data, error } = await supabase
         .from("chat_messages")
         .select("*")
         .eq("user_id", user.id)
-        .order("created_at", { ascending: true })
+        .order("created_at", { ascending: false })
         .limit(limit);
 
     if (error) throw error;
-    return data || [];
+    return (data || []).reverse();
 }
 
 // Save a single chat message for the current user
