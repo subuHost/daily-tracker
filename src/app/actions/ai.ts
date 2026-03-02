@@ -806,3 +806,47 @@ export async function refreshBriefingAction(): Promise<{ briefing: string }> {
         return { briefing: "Could not refresh briefing. Try again later." };
     }
 }
+
+/**
+ * Suggests a category for an expense based on its description.
+ */
+export async function suggestCategory(description: string): Promise<string | null> {
+    const genAI = getGeminiClient();
+    if (!genAI || !description) return null;
+
+    try {
+        const { createClient } = await import("@/lib/supabase/server");
+        const supabase = createClient();
+
+        const { getCategories } = await import("@/lib/db/categories");
+        const categories = await getCategories("expense");
+
+        if (categories.length === 0) return null;
+
+        const categoryNames = categories.map(c => c.name);
+
+        const model = genAI.getGenerativeModel({
+            model: "gemini-flash-latest",
+            generationConfig: {
+                temperature: 0.1, // Low temperature for consistent classification
+            }
+        });
+
+        const prompt = `Task: Categorize a financial expense.
+        Expense Description: "${description}"
+        Available Categories: ${categoryNames.join(", ")}
+        
+        Rule: Return ONLY the exact name of the best matching category from the list provided. Do not provide any explanation or extra text. If no category is a good match, return null.`;
+
+        const result = await model.generateContent(prompt);
+        const suggestion = result.response.text().trim();
+
+        if (suggestion.toLowerCase() === 'null') return null;
+
+        const matched = categories.find(c => c.name.toLowerCase() === suggestion.toLowerCase());
+        return matched ? matched.id : null;
+    } catch (error) {
+        console.error("AI Category Suggestion Error:", error);
+        return null;
+    }
+}

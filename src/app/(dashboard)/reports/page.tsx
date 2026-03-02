@@ -26,10 +26,14 @@ import {
     PieChart,
     Pie,
     Cell,
+    LineChart,
+    Line,
 } from "recharts";
 import { toast } from "sonner";
-import { getStats, getCategoryBreakdownRange, getHabits, getMoodStats, getInvestments } from "@/lib/db";
-import { startOfMonth, endOfMonth, format, subMonths, startOfYear } from "date-fns";
+import { getStats, getCategoryBreakdownRange, getHabits, getMoodStats, getInvestments, getMonthlyTrend, getTransactions, getCurrentBudget, getMonthlyBudgets, type MonthlyTrendPoint, type MonthlyBudget } from "@/lib/db";
+import { startOfMonth, endOfMonth, format, subMonths, startOfYear, differenceInDays, getDaysInMonth } from "date-fns";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
 
 export default function ReportsPage() {
     const [dateRange, setDateRange] = useState({
@@ -44,6 +48,8 @@ export default function ReportsPage() {
     const [habitData, setHabitData] = useState<{ name: string; completed: number; total: number }[]>([]);
     const [moodStats, setMoodStats] = useState<{ average: number; breakdown: any[] }>({ average: 0, breakdown: [] });
     const [portfolioValue, setPortfolioValue] = useState(0);
+    const [monthlyTrendData, setMonthlyTrendData] = useState<(MonthlyTrendPoint & { budget?: number })[]>([]);
+    const [currentBudget, setCurrentBudget] = useState<number | null>(null);
 
     const loadReportData = async () => {
         setIsLoading(true);
@@ -78,8 +84,23 @@ export default function ReportsPage() {
 
             // Fetch Portfolio Value (Lifetime)
             const investments = await getInvestments();
-            const totalValue = investments.reduce((sum, inv) => sum + (inv.buy_price * inv.quantity), 0);
+            const totalValue = investments.reduce((sum, inv) => sum + (Number(inv.buy_price) * Number(inv.quantity)), 0);
             setPortfolioValue(totalValue);
+
+            // Fetch Monthly Trend and Budgets
+            const [trend, budgets, budget] = await Promise.all([
+                getMonthlyTrend(12),
+                getMonthlyBudgets(12),
+                getCurrentBudget(),
+            ]);
+
+            // Combine trend and budget data for chart
+            const combinedData = trend.map(t => ({
+                ...t,
+                budget: budgets.find(b => b.month === t.month)?.budget
+            }));
+            setMonthlyTrendData(combinedData);
+            setCurrentBudget(budget ? Number(budget.amount) : null);
 
         } catch (error) {
             console.error("Failed to load report data:", error);
@@ -118,11 +139,52 @@ export default function ReportsPage() {
         });
     };
 
-    const handleExport = (type: string) => {
-        toast.success(`Exporting ${type} report as CSV...`);
+    const handleExport = async (type: string) => {
+        try {
+            let csvContent = "";
+            let fileName = "";
+
+            if (type === "categories") {
+                csvContent = "Category,Amount (₹),Color\n" +
+                    categoryBreakdown.map(c => `"${c.name}",${c.value},"${c.color}"`).join("\n");
+                fileName = `expenses-by-category-${dateRange.start}-to-${dateRange.end}.csv`;
+            } else if (type === "transactions") {
+                const transactions = await getTransactions(200, dateRange.start, dateRange.end);
+                csvContent = "Date,Type,Description,Category,Amount (₹),Status\n" +
+                    transactions.map(t => `${t.date},${t.type},"${t.description}","${t.category_name}",${t.amount},${t.status}`).join("\n");
+                fileName = `transactions-${dateRange.start}-to-${dateRange.end}.csv`;
+            }
+
+            const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", fileName);
+            link.style.visibility = "hidden";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            toast.success(`Exported ${type} report successfully!`);
+        } catch (error) {
+            console.error("Export failed:", error);
+            toast.error("Failed to export. Please try again.");
+        }
     };
 
     const savings = totalIncome - totalExpenses;
+
+    // Budget projection
+    const daysElapsed = differenceInDays(new Date(), startOfMonth(new Date())) + 1;
+    const totalDaysInMonth = getDaysInMonth(new Date());
+    const isCurrentMonth = format(new Date(), "yyyy-MM") === dateRange.start.substring(0, 7);
+
+    const projectedSpend = currentBudget && isCurrentMonth
+        ? (totalExpenses / daysElapsed) * totalDaysInMonth
+        : null;
+
+    const isOverBudget = projectedSpend && currentBudget && projectedSpend > currentBudget;
+    const projectedDiff = projectedSpend && currentBudget ? projectedSpend - currentBudget : 0;
 
     // Mood Emoji based on average
     const getMoodEmoji = (avg: number) => {
@@ -165,6 +227,18 @@ export default function ReportsPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Budget Alert Banner */}
+            {isOverBudget && (
+                <Alert variant="destructive" className="bg-amber-50 border-amber-200 text-amber-900">
+                    <AlertCircle className="h-4 w-4 text-amber-600" />
+                    <AlertTitle className="text-amber-800 font-semibold">Budget Alert: Projected Overspend {formatCurrency(projectedDiff)}</AlertTitle>
+                    <AlertDescription className="text-amber-700">
+                        At your current pace, you&apos;ll exceed your {formatCurrency(currentBudget || 0)} budget by month end.
+                        You&apos;ve spent {formatCurrency(totalExpenses)} in {daysElapsed} days. Projected total: {formatCurrency(projectedSpend || 0)}.
+                    </AlertDescription>
+                </Alert>
+            )}
 
             {isLoading ? (
                 <div className="flex items-center justify-center py-20">
@@ -336,35 +410,89 @@ export default function ReportsPage() {
                         </Card>
                     </div>
 
-                    {/* Charts Row 2 */}
-                    <div className="grid gap-6 grid-cols-1">
-                        {/* Habit Completion */}
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between">
-                                <CardTitle className="text-lg">Habit Consistency (Lifetime)</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="space-y-4">
-                                    {habitData.map((habit) => (
-                                        <div key={habit.name} className="space-y-1">
-                                            <div className="flex justify-between text-sm">
-                                                <span>{habit.name}</span>
-                                                <span className="text-muted-foreground">
-                                                    {habit.completed}/{habit.total} days ({Math.round((habit.completed / habit.total) * 100)}%)
-                                                </span>
-                                            </div>
-                                            <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                                <div
-                                                    className="h-full bg-green-500 rounded-full transition-all duration-500"
-                                                    style={{ width: `${(habit.completed / habit.total) * 100}%` }}
-                                                />
-                                            </div>
-                                        </div>
-                                    ))}
+                    {/* Monthly Trend Chart */}
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between">
+                            <CardTitle className="text-lg">Monthly Income vs Expenses</CardTitle>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleExport("transactions")}
+                            >
+                                <Download className="h-4 w-4 mr-1" />
+                                Full CSV
+                            </Button>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="h-[300px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={monthlyTrendData}>
+                                        <XAxis dataKey="month" axisLine={false} tickLine={false} fontSize={12} />
+                                        <YAxis
+                                            axisLine={false}
+                                            tickLine={false}
+                                            fontSize={12}
+                                            tickFormatter={(v) => `₹${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`}
+                                        />
+                                        <Tooltip
+                                            formatter={(v: number) => formatCurrency(v)}
+                                            contentStyle={{
+                                                backgroundColor: "hsl(var(--card))",
+                                                border: "1px solid hsl(var(--border))",
+                                                borderRadius: "8px",
+                                            }}
+                                        />
+                                        <Line type="monotone" dataKey="income" stroke="#22c55e" strokeWidth={2} dot={false} />
+                                        <Line type="monotone" dataKey="expenses" stroke="#ef4444" strokeWidth={2} dot={false} />
+                                        {monthlyTrendData.some(d => d.budget) && (
+                                            <Line type="stepAfter" dataKey="budget" stroke="#94a3b8" strokeWidth={2} strokeDasharray="5 5" dot={false} />
+                                        )}
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </div>
+                            <div className="flex justify-center gap-6 mt-4">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-green-500" />
+                                    <span className="text-xs text-muted-foreground">Income</span>
                                 </div>
-                            </CardContent>
-                        </Card>
-                    </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-red-500" />
+                                    <span className="text-xs text-muted-foreground">Expenses</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 border-t-2 border-dashed border-slate-400" />
+                                    <span className="text-xs text-muted-foreground">Budget</span>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Habit Completion */}
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between">
+                            <CardTitle className="text-lg">Habit Consistency (Lifetime)</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-4">
+                                {habitData.map((habit) => (
+                                    <div key={habit.name} className="space-y-1">
+                                        <div className="flex justify-between text-sm">
+                                            <span>{habit.name}</span>
+                                            <span className="text-muted-foreground">
+                                                {habit.completed}/{habit.total} days ({Math.round((habit.completed / habit.total) * 100)}%)
+                                            </span>
+                                        </div>
+                                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                            <div
+                                                className="h-full bg-green-500 rounded-full transition-all duration-500"
+                                                style={{ width: `${(habit.completed / habit.total) * 100}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
                 </>
             )}
         </div>
