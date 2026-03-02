@@ -774,7 +774,7 @@ export async function getChatSessions(folderId?: string) {
     const supabase = createClient();
     let query = supabase.from("chat_sessions").select("*").order("updated_at", { ascending: false });
     if (folderId) query = query.eq("folder_id", folderId);
-    const { data, error } = query;
+    const { data, error } = await query;
     if (error) throw error;
     return data;
 }

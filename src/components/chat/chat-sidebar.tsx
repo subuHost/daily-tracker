@@ -35,6 +35,23 @@ import {
 } from "@/app/actions/ai";
 import { toast } from "sonner";
 
+interface ChatFolder {
+    id: string;
+    name: string;
+    color: string;
+    user_id?: string;
+    created_at?: string;
+}
+
+interface ChatSession {
+    id: string;
+    title: string;
+    folder_id: string | null;
+    user_id?: string;
+    created_at?: string;
+    updated_at?: string;
+}
+
 interface ChatSidebarProps {
     activeSessionId?: string;
     onSessionSelect: (id: string) => void;
@@ -42,8 +59,8 @@ interface ChatSidebarProps {
 }
 
 export function ChatSidebar({ activeSessionId, onSessionSelect, onNewChat }: ChatSidebarProps) {
-    const [folders, setFolders] = useState<any[]>([]);
-    const [sessions, setSessions] = useState<any[]>([]);
+    const [folders, setFolders] = useState<ChatFolder[]>([]);
+    const [sessions, setSessions] = useState<ChatSession[]>([]);
     const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
@@ -106,7 +123,7 @@ export function ChatSidebar({ activeSessionId, onSessionSelect, onNewChat }: Cha
         }
     };
 
-    const handleStartRename = (session: any) => {
+    const handleStartRename = (session: ChatSession) => {
         setEditingSessionId(session.id);
         setEditSessionTitle(session.title);
     };
@@ -130,7 +147,7 @@ export function ChatSidebar({ activeSessionId, onSessionSelect, onNewChat }: Cha
     const sessionsInFolders = folders.reduce((acc, folder) => {
         acc[folder.id] = filteredSessions.filter(s => s.folder_id === folder.id);
         return acc;
-    }, {} as Record<string, any[]>);
+    }, {} as Record<string, ChatSession[]>);
 
     const straySessions = filteredSessions.filter(s => !s.folder_id);
 
@@ -272,6 +289,19 @@ export function ChatSidebar({ activeSessionId, onSessionSelect, onNewChat }: Cha
     );
 }
 
+interface SessionItemProps {
+    session: ChatSession;
+    isActive: boolean;
+    onSelect: (id: string) => void;
+    onDelete: (id: string) => void;
+    onRename: (session: ChatSession) => void;
+    isEditing: boolean;
+    editTitle: string;
+    onEditChange: (title: string) => void;
+    onEditSave: () => void;
+    onEditCancel: () => void;
+}
+
 function SessionItem({
     session,
     isActive,
@@ -283,7 +313,7 @@ function SessionItem({
     onEditChange,
     onEditSave,
     onEditCancel
-}: any) {
+}: SessionItemProps) {
     if (isEditing) {
         return (
             <div className="flex items-center gap-1 p-1">

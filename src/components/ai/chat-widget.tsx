@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { MessageCircle, X, Send, Sparkles, User, Bot, Loader2, Camera, Trash2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import {
     chatWithAI,
@@ -387,8 +388,8 @@ export function ChatWidget() {
                             </CardFooter>
                         </Card>
                     </motion.div>
-                </AnimatePresence>
-            )}
+                )}
+            </AnimatePresence>
         </>
     );
 }
