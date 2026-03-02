@@ -26,7 +26,7 @@ import {
     YAxis,
     Tooltip,
 } from "recharts";
-import { getMonthlyStats, getCategoryBreakdown } from "@/lib/db";
+import { getMonthlyStats, getCategoryBreakdown, getMonthlyTrend, type MonthlyTrendPoint } from "@/lib/db";
 
 const financeCards = [
     {
@@ -84,6 +84,7 @@ export default function FinancePage() {
     const [totalIncome, setTotalIncome] = useState(0);
     const [totalExpenses, setTotalExpenses] = useState(0);
     const [categoryData, setCategoryData] = useState<{ name: string; value: number; color: string }[]>([]);
+    const [monthlyTrendData, setMonthlyTrendData] = useState<MonthlyTrendPoint[]>([]);
 
     useEffect(() => {
         async function loadFinanceData() {
@@ -100,6 +101,10 @@ export default function FinancePage() {
                 // Fetch category breakdown for pie chart
                 const categories = await getCategoryBreakdown(month, year);
                 setCategoryData(categories);
+
+                // Fetch monthly trend
+                const trend = await getMonthlyTrend(6);
+                setMonthlyTrendData(trend);
             } catch (error) {
                 console.error("Failed to load finance data:", error);
             } finally {
@@ -249,7 +254,7 @@ export default function FinancePage() {
                         <CardContent>
                             <div className="h-[250px]">
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={monthlyData}>
+                                    <LineChart data={monthlyTrendData}>
                                         <XAxis
                                             dataKey="month"
                                             axisLine={false}

@@ -4,13 +4,26 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { MessageCircle, X, Send, Sparkles, User, Bot, Loader2, Camera, ImageIcon } from "lucide-react";
+import { MessageCircle, X, Send, Sparkles, User, Bot, Loader2, Camera, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { chatWithAI, analyzeAndLogFoodImage, type Message } from "@/app/actions/ai";
+import {
+    chatWithAI,
+    analyzeAndLogFoodImage,
+    loadChatHistory,
+    persistImageChatMessages,
+    clearChatHistoryAction,
+    getDailyContextAction,
+    type Message,
+} from "@/app/actions/ai";
 
 interface ChatMessage extends Message {
     imagePreview?: string; // For displaying image in chat
 }
+
+const WELCOME_MESSAGE: ChatMessage = {
+    role: "assistant",
+    content: "Hi! I'm your AI health & productivity assistant. How can I help you today? You can also tap the 📷 button to log food by photo!",
+};
 
 // Compress image to reduce file size
 async function compressImage(file: File, maxWidth: number = 1024, quality: number = 0.7): Promise<string> {
@@ -23,7 +36,7 @@ async function compressImage(file: File, maxWidth: number = 1024, quality: numbe
             img.src = event.target?.result as string;
 
             img.onload = () => {
-                const canvas = document.createElement('canvas');
+                const canvas = document.createElement("canvas");
                 let width = img.width;
                 let height = img.height;
 
@@ -36,37 +49,67 @@ async function compressImage(file: File, maxWidth: number = 1024, quality: numbe
                 canvas.width = width;
                 canvas.height = height;
 
-                const ctx = canvas.getContext('2d');
+                const ctx = canvas.getContext("2d");
                 if (!ctx) {
-                    reject(new Error('Failed to get canvas context'));
+                    reject(new Error("Failed to get canvas context"));
                     return;
                 }
 
                 ctx.drawImage(img, 0, 0, width, height);
 
                 // Convert to JPEG with compression
-                const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+                const compressedDataUrl = canvas.toDataURL("image/jpeg", quality);
                 // Extract base64 without prefix
-                const base64 = compressedDataUrl.split(',')[1];
+                const base64 = compressedDataUrl.split(",")[1];
                 resolve(base64);
             };
 
-            img.onerror = () => reject(new Error('Failed to load image'));
+            img.onerror = () => reject(new Error("Failed to load image"));
         };
 
-        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.onerror = () => reject(new Error("Failed to read file"));
     });
 }
 
 export function ChatWidget() {
     const [isOpen, setIsOpen] = useState(false);
-    const [messages, setMessages] = useState<ChatMessage[]>([
-        { role: "assistant", content: "Hi! I'm your AI health & productivity assistant. How can I help you today? You can also tap the 📷 button to log food by photo!" }
-    ]);
+    const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
+    const [isLoadingHistory, setIsLoadingHistory] = useState(true);
     const scrollRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const historyLoaded = useRef(false);
+    const userContextRef = useRef<string>("");
+
+    // Load persisted chat history and daily context on mount
+    useEffect(() => {
+        if (historyLoaded.current) return;
+        historyLoaded.current = true;
+
+        // Load chat history
+        loadChatHistory()
+            .then((history) => {
+                if (history.length > 0) {
+                    setMessages(history as ChatMessage[]);
+                }
+            })
+            .catch((err) => {
+                console.error("Failed to load chat history:", err);
+            })
+            .finally(() => {
+                setIsLoadingHistory(false);
+            });
+
+        // Load daily context (non-blocking, for context-aware chat)
+        getDailyContextAction()
+            .then((ctx) => {
+                userContextRef.current = ctx;
+            })
+            .catch((err) => {
+                console.error("Failed to load daily context:", err);
+            });
+    }, []);
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -79,16 +122,19 @@ export function ChatWidget() {
         if (!input.trim() || isLoading) return;
 
         const userMessage: ChatMessage = { role: "user", content: input };
-        setMessages(prev => [...prev, userMessage]);
+        setMessages((prev) => [...prev, userMessage]);
         setInput("");
         setIsLoading(true);
 
         try {
-            const response = await chatWithAI([...messages, userMessage]);
-            setMessages(prev => [...prev, response as ChatMessage]);
+            const response = await chatWithAI([...messages, userMessage], userContextRef.current || undefined);
+            setMessages((prev) => [...prev, response as ChatMessage]);
         } catch (error) {
             console.error(error);
-            setMessages(prev => [...prev, { role: "assistant", content: "Sorry, I had trouble connecting. Please try again." }]);
+            setMessages((prev) => [
+                ...prev,
+                { role: "assistant", content: "Sorry, I had trouble connecting. Please try again." },
+            ]);
         } finally {
             setIsLoading(false);
         }
@@ -100,10 +146,13 @@ export function ChatWidget() {
 
         // Validate file type
         if (!file.type.startsWith("image/")) {
-            setMessages(prev => [...prev, {
-                role: "assistant",
-                content: "Please select an image file (JPEG, PNG, etc.)."
-            }]);
+            setMessages((prev) => [
+                ...prev,
+                {
+                    role: "assistant",
+                    content: "Please select an image file (JPEG, PNG, etc.).",
+                },
+            ]);
             return;
         }
 
@@ -113,12 +162,17 @@ export function ChatWidget() {
             // Create preview URL for display
             const previewUrl = URL.createObjectURL(file);
 
+            const userContent = "📸 Analyzing food image...";
+
             // Add user message with image preview
-            setMessages(prev => [...prev, {
-                role: "user",
-                content: "📸 Analyzing food image...",
-                imagePreview: previewUrl
-            }]);
+            setMessages((prev) => [
+                ...prev,
+                {
+                    role: "user",
+                    content: userContent,
+                    imagePreview: previewUrl,
+                },
+            ]);
 
             // Compress image before sending (max 1024px, 70% quality for JPEG)
             const base64 = await compressImage(file, 1024, 0.7);
@@ -127,23 +181,41 @@ export function ChatWidget() {
             const result = await analyzeAndLogFoodImage(base64, "image/jpeg");
 
             // Add AI response
-            setMessages(prev => [...prev, {
-                role: "assistant",
-                content: result.message
-            }]);
+            setMessages((prev) => [
+                ...prev,
+                {
+                    role: "assistant",
+                    content: result.message,
+                },
+            ]);
 
+            // Persist both messages to the database (Bug Fix #2)
+            await persistImageChatMessages(userContent, result.message);
         } catch (error: any) {
             console.error("Image upload error:", error);
-            setMessages(prev => [...prev, {
-                role: "assistant",
-                content: `Sorry, I couldn't analyze that image. ${error.message || "Please try again with a clearer photo."}`
-            }]);
+            setMessages((prev) => [
+                ...prev,
+                {
+                    role: "assistant",
+                    content: `Sorry, I couldn't analyze that image. ${error.message || "Please try again with a clearer photo."}`,
+                },
+            ]);
         } finally {
             setIsLoading(false);
             // Reset file input
             if (fileInputRef.current) {
                 fileInputRef.current.value = "";
             }
+        }
+    };
+
+    const handleClearHistory = async () => {
+        if (!confirm("Clear all chat history? This cannot be undone.")) return;
+        try {
+            await clearChatHistoryAction();
+            setMessages([WELCOME_MESSAGE]);
+        } catch (error) {
+            console.error("Failed to clear chat history:", error);
         }
     };
 
@@ -160,63 +232,89 @@ export function ChatWidget() {
             )}
 
             {/* Chat Window */}
-            <div className={cn(
-                "fixed bottom-20 left-4 z-[70] w-[90vw] md:w-96 transition-all duration-300 ease-in-out origin-bottom-left",
-                isOpen ? "scale-100 opacity-100" : "scale-0 opacity-0 pointer-events-none"
-            )}>
+            <div
+                className={cn(
+                    "fixed bottom-20 left-4 z-[70] w-[90vw] md:w-96 transition-all duration-300 ease-in-out origin-bottom-left",
+                    isOpen ? "scale-100 opacity-100" : "scale-0 opacity-0 pointer-events-none"
+                )}
+            >
                 <Card className="h-[500px] flex flex-col shadow-2xl border-blue-500/20">
                     <CardHeader className="p-4 border-b bg-blue-600 text-white rounded-t-lg flex flex-row items-center justify-between space-y-0">
                         <div className="flex items-center gap-2">
                             <Sparkles className="h-5 w-5" />
                             <CardTitle className="text-base">AI Assistant</CardTitle>
                         </div>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-white hover:bg-white/20"
-                            onClick={() => setIsOpen(false)}
-                        >
-                            <X className="h-5 w-5" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-white hover:bg-white/20"
+                                onClick={handleClearHistory}
+                                title="Clear chat history"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-white hover:bg-white/20"
+                                onClick={() => setIsOpen(false)}
+                            >
+                                <X className="h-5 w-5" />
+                            </Button>
+                        </div>
                     </CardHeader>
 
                     <CardContent ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
-                        {messages.map((m, i) => (
-                            <div
-                                key={i}
-                                className={cn(
-                                    "flex items-start gap-2.5",
-                                    m.role === "user" ? "flex-row-reverse" : "flex-row"
-                                )}
-                            >
-                                <div className={cn(
-                                    "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
-                                    m.role === "user" ? "bg-muted" : "bg-blue-100 text-blue-600"
-                                )}>
-                                    {m.role === "user" ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
-                                </div>
-                                <div className={cn(
-                                    "rounded-lg max-w-[80%] text-sm overflow-hidden",
-                                    m.role === "user"
-                                        ? "bg-primary text-primary-foreground"
-                                        : "bg-muted text-muted-foreground"
-                                )}>
-                                    {/* Image preview if present */}
-                                    {m.imagePreview && (
-                                        <div className="relative">
-                                            <img
-                                                src={m.imagePreview}
-                                                alt="Food"
-                                                className="w-full h-32 object-cover"
-                                            />
-                                        </div>
+                        {isLoadingHistory ? (
+                            <div className="flex items-center justify-center h-full text-muted-foreground text-sm gap-2">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Loading history…
+                            </div>
+                        ) : (
+                            messages.map((m, i) => (
+                                <div
+                                    key={i}
+                                    className={cn(
+                                        "flex items-start gap-2.5",
+                                        m.role === "user" ? "flex-row-reverse" : "flex-row"
                                     )}
-                                    <div className="px-3 py-2 whitespace-pre-wrap">
-                                        {m.content}
+                                >
+                                    <div
+                                        className={cn(
+                                            "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
+                                            m.role === "user" ? "bg-muted" : "bg-blue-100 text-blue-600"
+                                        )}
+                                    >
+                                        {m.role === "user" ? (
+                                            <User className="h-4 w-4" />
+                                        ) : (
+                                            <Bot className="h-4 w-4" />
+                                        )}
+                                    </div>
+                                    <div
+                                        className={cn(
+                                            "rounded-lg max-w-[80%] text-sm overflow-hidden",
+                                            m.role === "user"
+                                                ? "bg-primary text-primary-foreground"
+                                                : "bg-muted text-muted-foreground"
+                                        )}
+                                    >
+                                        {/* Image preview if present */}
+                                        {m.imagePreview && (
+                                            <div className="relative">
+                                                <img
+                                                    src={m.imagePreview}
+                                                    alt="Food"
+                                                    className="w-full h-32 object-cover"
+                                                />
+                                            </div>
+                                        )}
+                                        <div className="px-3 py-2 whitespace-pre-wrap">{m.content}</div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            ))
+                        )}
                         {isLoading && (
                             <div className="flex items-center gap-2 text-muted-foreground text-sm pl-10">
                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -254,7 +352,7 @@ export function ChatWidget() {
                             <Input
                                 placeholder="Log food, add task, or ask anything..."
                                 value={input}
-                                onChange={e => setInput(e.target.value)}
+                                onChange={(e) => setInput(e.target.value)}
                                 className="flex-1"
                                 disabled={isLoading}
                             />

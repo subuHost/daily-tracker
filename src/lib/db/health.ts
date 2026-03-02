@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { generateEmbedding } from "@/lib/ai/embeddings";
+import { subDays, format } from "date-fns";
 
 export interface HealthMetric {
     id: string;
@@ -131,4 +132,74 @@ export async function getHealthMetrics(date: string, supabaseClient?: any): Prom
 
     if (error) throw error;
     return data;
+}
+
+export interface HealthTrendPoint {
+    date: string;
+    weight: number | null;
+    sleep_hours: number | null;
+    water_intake: number | null;
+}
+
+export async function getHealthTrend(days: number): Promise<HealthTrendPoint[]> {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const startDate = format(subDays(new Date(), days), "yyyy-MM-dd");
+
+    const { data, error } = await supabase
+        .from("health_metrics")
+        .select("date, weight, sleep_hours, water_intake")
+        .eq("user_id", user.id)
+        .gte("date", startDate)
+        .order("date", { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+}
+
+export interface DailyCalorieSummary {
+    date: string;
+    totalCalories: number;
+    totalProtein: number;
+    totalCarbs: number;
+    totalFats: number;
+}
+
+export async function getDailyCalorieTotals(days: number): Promise<DailyCalorieSummary[]> {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const startDate = format(subDays(new Date(), days), "yyyy-MM-dd");
+
+    const { data, error } = await supabase
+        .from("food_logs")
+        .select("date, calories, protein, carbs, fats")
+        .eq("user_id", user.id)
+        .gte("date", startDate)
+        .order("date", { ascending: true });
+
+    if (error) throw error;
+
+    const grouped = (data || []).reduce((acc: Record<string, DailyCalorieSummary>, curr) => {
+        const date = curr.date;
+        if (!acc[date]) {
+            acc[date] = {
+                date,
+                totalCalories: 0,
+                totalProtein: 0,
+                totalCarbs: 0,
+                totalFats: 0
+            };
+        }
+        acc[date].totalCalories += curr.calories || 0;
+        acc[date].totalProtein += curr.protein || 0;
+        acc[date].totalCarbs += curr.carbs || 0;
+        acc[date].totalFats += curr.fats || 0;
+        return acc;
+    }, {});
+
+    return Object.values(grouped);
 }

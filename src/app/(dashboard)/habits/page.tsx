@@ -32,8 +32,10 @@ import {
     DialogTitle,
     DialogFooter,
 } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getHabits, toggleHabitToday, updateHabit, deleteHabit, type HabitWithStats } from "@/lib/db";
 import { toast } from "sonner";
+import { format } from "date-fns";
 
 export default function HabitsPage() {
     const [habits, setHabits] = useState<HabitWithStats[]>([]);
@@ -266,21 +268,29 @@ export default function HabitsPage() {
                                     </div>
 
                                     {/* Monthly Heatmap */}
-                                    <div className="mt-4 flex flex-wrap gap-1">
-                                        {Array.from({ length: 28 }).map((_, i) => {
-                                            const day = new Date();
-                                            day.setDate(day.getDate() - (27 - i)); // Last 28 days
-                                            const dayStr = day.toISOString().split("T")[0];
-                                            const isCompleted = habit.recentLogs?.includes(dayStr);
-                                            return (
-                                                <div
-                                                    key={i}
-                                                    title={dayStr}
-                                                    className={`w-2 h-2 rounded-full ${isCompleted ? "bg-green-500" : "bg-muted-foreground/20"}`}
-                                                />
-                                            )
-                                        })}
-                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-3 mb-1">Last 12 weeks</p>
+                                    <TooltipProvider>
+                                        <div className="flex flex-wrap gap-1">
+                                            {Array.from({ length: 84 }).map((_, i) => {
+                                                const day = new Date();
+                                                day.setDate(day.getDate() - (83 - i)); // Last 84 days
+                                                const dayStr = day.toISOString().split("T")[0];
+                                                const isCompleted = habit.recentLogs?.includes(dayStr);
+                                                return (
+                                                    <Tooltip key={i}>
+                                                        <TooltipTrigger asChild>
+                                                            <div
+                                                                className={`w-1.5 h-1.5 rounded-sm ${isCompleted ? "bg-green-500" : "bg-muted-foreground/20"}`}
+                                                            />
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            <p className="text-[10px]">{format(day, "MMM d, yyyy")}</p>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                )
+                                            })}
+                                        </div>
+                                    </TooltipProvider>
                                 </CardContent>
                             </Card>
                         ))}
@@ -336,8 +346,8 @@ export default function HabitsPage() {
                                         type="button"
                                         onClick={() => toggleEditDay(day.value)}
                                         className={`w-9 h-9 rounded-full text-sm font-medium transition-all ${editForm.targetDays.includes(day.value)
-                                                ? "bg-primary text-primary-foreground"
-                                                : "bg-muted text-muted-foreground hover:bg-accent"
+                                            ? "bg-primary text-primary-foreground"
+                                            : "bg-muted text-muted-foreground hover:bg-accent"
                                             }`}
                                         title={day.fullLabel}
                                     >

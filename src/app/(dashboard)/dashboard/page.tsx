@@ -5,7 +5,7 @@ import { ExpensesWidget } from "@/components/dashboard/expenses-widget";
 import { HabitsWidget } from "@/components/dashboard/habits-widget";
 import { NetWorthWidget } from "@/components/dashboard/net-worth-widget";
 import { QuickLinksWidget } from "@/components/dashboard/quick-links-widget";
-import { getCurrentBudget, getMonthlySpent, getTransactions } from "@/lib/db";
+import { AIDailyBriefingWidget } from "@/components/dashboard/ai-briefing-widget";
 import { EventsWidget } from "@/components/widgets/events-widget";
 import { HealthWidget } from "@/components/dashboard/health-widget";
 import { TransactionReviewStack } from "@/components/dashboard/transaction-review-stack";
@@ -19,6 +19,8 @@ import {
     WidgetSkeleton,
 } from "@/components/ui/skeleton";
 import { createClient } from "@/lib/supabase/server";
+import { getUserPreferences } from "@/app/actions/preferences";
+import { DashboardWidgetGrid } from "@/components/dashboard/dashboard-widget-grid";
 
 // Server-side data fetchers
 async function getBudgetData() {
@@ -29,7 +31,6 @@ async function getBudgetData() {
     const now = new Date();
     const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
 
-    // Get current budget
     const { data: budgetData } = await supabase
         .from("budgets")
         .select("amount")
@@ -37,7 +38,6 @@ async function getBudgetData() {
         .eq("month", monthStr)
         .single();
 
-    // Get monthly spent
     const startDate = monthStr;
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const endDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${lastDay}`;
@@ -91,69 +91,76 @@ async function ExpensesWidgetServer() {
     return <ExpensesWidget transactions={transactions} />;
 }
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
     const greeting = getGreeting();
+    const preferences = await getUserPreferences();
+
+    // Map widget IDs to their rendered components
+    const widgetSlots = {
+        "budget": (
+            <Suspense fallback={<BudgetWidgetSkeleton />}>
+                <BudgetWidgetServer />
+            </Suspense>
+        ),
+        "tasks": (
+            <Suspense fallback={<TasksWidgetSkeleton />}>
+                <TasksWidget />
+            </Suspense>
+        ),
+        "events": (
+            <Suspense fallback={<WidgetSkeleton />}>
+                <EventsWidget />
+            </Suspense>
+        ),
+        "net-worth": (
+            <Suspense fallback={<NetWorthWidgetSkeleton />}>
+                <NetWorthWidget />
+            </Suspense>
+        ),
+        "expenses": (
+            <Suspense fallback={<ExpensesWidgetSkeleton />}>
+                <ExpensesWidgetServer />
+            </Suspense>
+        ),
+        "health": (
+            <Suspense fallback={<WidgetSkeleton />}>
+                <HealthWidget />
+            </Suspense>
+        ),
+        "habits": (
+            <Suspense fallback={<HabitsWidgetSkeleton />}>
+                <HabitsWidget />
+            </Suspense>
+        ),
+        "transactions": (
+            <div className="md:col-span-1">
+                <TransactionReviewStack />
+            </div>
+        ),
+        "quick-links": <QuickLinksWidget />,
+    };
 
     return (
         <div className="space-y-6">
-            {/* Header */}
-            <div className="hidden md:block">
-                <h1 className="text-2xl font-bold tracking-tight">{greeting}</h1>
-                <p className="text-muted-foreground">
-                    Here&apos;s what&apos;s happening with your life today.
-                </p>
-            </div>
-
-            {/* Mobile Header */}
-            <div className="md:hidden">
-                <h1 className="text-xl font-bold tracking-tight">{greeting}</h1>
-            </div>
-
-            {/* Widgets Grid with Suspense Boundaries */}
-            <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                {/* Budget Widget */}
-                <Suspense fallback={<BudgetWidgetSkeleton />}>
-                    <BudgetWidgetServer />
-                </Suspense>
-
-                {/* Tasks Widget */}
-                <Suspense fallback={<TasksWidgetSkeleton />}>
-                    <TasksWidget />
-                </Suspense>
-
-                {/* Events Widget */}
-                <Suspense fallback={<WidgetSkeleton />}>
-                    <EventsWidget />
-                </Suspense>
-
-                {/* Net Worth Widget */}
-                <Suspense fallback={<NetWorthWidgetSkeleton />}>
-                    <NetWorthWidget />
-                </Suspense>
-
-                {/* Expenses Widget */}
-                <Suspense fallback={<ExpensesWidgetSkeleton />}>
-                    <ExpensesWidgetServer />
-                </Suspense>
-
-                {/* Health Widget */}
-                <Suspense fallback={<WidgetSkeleton />}>
-                    <HealthWidget />
-                </Suspense>
-
-                {/* Habits Widget */}
-                <Suspense fallback={<HabitsWidgetSkeleton />}>
-                    <HabitsWidget />
-                </Suspense>
-
-                {/* Transaction Review Widget */}
-                <div className="md:col-span-1">
-                    <TransactionReviewStack />
+            {/* AI Daily Briefing - Pinned at the top */}
+            <div className="space-y-6">
+                <div className="hidden md:block">
+                    <h1 className="text-2xl font-bold tracking-tight">{greeting}</h1>
+                    <p className="text-muted-foreground">
+                        Here&apos;s what&apos;s happening with your life today.
+                    </p>
+                </div>
+                <div className="md:hidden">
+                    <h1 className="text-xl font-bold tracking-tight">{greeting}</h1>
                 </div>
 
-                {/* Quick Links - No async, renders immediately */}
-                <QuickLinksWidget />
+                <Suspense fallback={<WidgetSkeleton />}>
+                    <AIDailyBriefingWidget />
+                </Suspense>
             </div>
+
+            {/* Draggable & Customizable Grid */}
+            <DashboardWidgetGrid widgets={widgetSlots} preferences={preferences} />
 
             {/* Date indicator */}
             <div className="text-center text-sm text-muted-foreground pt-4">
@@ -167,3 +174,4 @@ export default function DashboardPage() {
         </div>
     );
 }
+

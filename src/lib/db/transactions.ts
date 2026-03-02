@@ -68,6 +68,59 @@ export async function getTransactions(
     }));
 }
 
+export interface MonthlyTrendPoint {
+    month: string;
+    income: number;
+    expenses: number;
+    savings: number;
+}
+
+// Get monthly trend data for the last N months
+export async function getMonthlyTrend(months: number = 6): Promise<MonthlyTrendPoint[]> {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const now = new Date();
+    const startDate = new Date(now.getFullYear(), now.getMonth() - months + 1, 1);
+    const startDateStr = startDate.toISOString().split("T")[0];
+
+    const { data, error } = await supabase
+        .from("transactions")
+        .select("type, amount, date")
+        .eq("user_id", user.id)
+        .gte("date", startDateStr)
+        .order("date", { ascending: true });
+
+    if (error) throw error;
+
+    const monthMap = new Map<string, MonthlyTrendPoint>();
+
+    // Initialize all months in range
+    for (let i = 0; i < months; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - months + 1 + i, 1);
+        const monthLabel = d.toLocaleString("default", { month: "short", year: "2-digit" });
+        monthMap.set(monthLabel, { month: monthLabel, income: 0, expenses: 0, savings: 0 });
+    }
+
+    // Aggregate transactions
+    (data || []).forEach((t: any) => {
+        const d = new Date(t.date);
+        const monthLabel = d.toLocaleString("default", { month: "short", year: "2-digit" });
+        const point = monthMap.get(monthLabel);
+        if (point) {
+            if (t.type === "income") {
+                point.income += Number(t.amount);
+            } else {
+                point.expenses += Number(t.amount);
+            }
+            point.savings = point.income - point.expenses;
+        }
+    });
+
+    return Array.from(monthMap.values());
+}
+
 // Create a new transaction
 export async function createTransaction(input: TransactionInput): Promise<Transaction> {
     const supabase = createClient();

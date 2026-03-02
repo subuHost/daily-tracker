@@ -1,17 +1,20 @@
 import { createClient } from "@/lib/supabase/server";
-import { getGroupedProblems, Problem } from "@/lib/db/study";
+import { getGroupedProblems, getStudyActivity, getStudyStreak, getTopicTimeBreakdown, Problem } from "@/lib/db/study";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ExternalLink, GraduationCap, CheckCircle2, Youtube, Flame, Plus } from "lucide-react";
+import { ExternalLink, GraduationCap, CheckCircle2, Youtube, Flame, Plus, Clock, BarChart3 } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ProblemRow } from "@/components/study/dsa-sheet/problem-row";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProblemsTable } from "@/components/study/dsa-sheet/problems-table";
 import { ImportProblemsDialog } from "@/components/study/dsa-sheet/import-problems-dialog";
+import { ActivityHeatmap } from "@/components/study/dashboard/activity-heatmap";
+import { StreakCounter } from "@/components/study/dashboard/streak-counter";
+import { TopicTimeChart } from "@/components/study/dashboard/topic-time-chart";
 
 export default async function StudyDashboard() {
     const supabase = await createClient();
@@ -21,7 +24,12 @@ export default async function StudyDashboard() {
         redirect("/auth/login");
     }
 
-    const groupedProblems = await getGroupedProblems(supabase);
+    const [groupedProblems, activityData, streak, topicBreakdown] = await Promise.all([
+        getGroupedProblems(supabase),
+        getStudyActivity(365, supabase),
+        getStudyStreak(supabase),
+        getTopicTimeBreakdown(supabase)
+    ]);
     const topics = Object.keys(groupedProblems);
     const allProblems = Object.values(groupedProblems).flat();
 
@@ -69,6 +77,47 @@ export default async function StudyDashboard() {
                 </TabsList>
 
                 <TabsContent value="topics" className="flex-1 overflow-y-auto space-y-6 mt-4 pr-2">
+                    {/* Analytics Dashboard */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="lg:col-span-2 space-y-6">
+                            <div className="bg-card border rounded-xl p-6 shadow-sm">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                                        <BarChart3 className="h-4 w-4 text-primary" /> Study Activity
+                                    </h3>
+                                    <span className="text-xs text-muted-foreground uppercase tracking-wider">Last 365 Days</span>
+                                </div>
+                                <ActivityHeatmap data={activityData} />
+                            </div>
+
+                            <div className="bg-card border rounded-xl p-6 shadow-sm">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                                        <Clock className="h-4 w-4 text-primary" /> Time Spent by Topic
+                                    </h3>
+                                </div>
+                                <TopicTimeChart data={topicBreakdown} />
+                            </div>
+                        </div>
+
+                        <div className="space-y-6">
+                            <StreakCounter streak={streak} />
+
+                            <div className="bg-indigo-600 dark:bg-indigo-700 rounded-xl p-6 text-white shadow-lg overflow-hidden relative">
+                                <div className="relative z-10">
+                                    <h3 className="text-lg font-bold mb-1">SRS Review</h3>
+                                    <p className="text-indigo-100 text-sm mb-4">You have {allProblems.filter(p => p.next_review_at && new Date(p.next_review_at) <= new Date()).length} problems due today.</p>
+                                    <Link href="/study/review">
+                                        <Button className="w-full bg-white text-indigo-600 hover:bg-indigo-50 border-none transition-colors">
+                                            Start Session
+                                        </Button>
+                                    </Link>
+                                </div>
+                                <GraduationCap className="absolute -right-4 -bottom-4 h-24 w-24 text-indigo-500/30 rotate-12" />
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Overall Progress Card */}
                     <div className="bg-card border rounded-xl p-6 shadow-sm">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

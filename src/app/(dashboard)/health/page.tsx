@@ -7,11 +7,25 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Activity, Flame, GlassWater, Moon, Scale, Plus, Utensils, Sparkles } from "lucide-react";
-import { getFoodLogs, getHealthMetrics, type FoodLog, type HealthMetric } from "@/lib/db/health";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from "recharts";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+    getFoodLogs,
+    getHealthMetrics,
+    getHealthTrend,
+    getDailyCalorieTotals,
+    type FoodLog,
+    type HealthMetric,
+    type HealthTrendPoint,
+    type DailyCalorieSummary
+} from "@/lib/db/health";
+import {
+    PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip,
+    LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, ReferenceLine, Legend
+} from "recharts";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { logHealthMetrics, logFood } from "@/lib/db/health";
+import { getUserPreferences, saveUserPreferences, type UserPreferences } from "@/app/actions/preferences";
 import { toast } from "sonner";
+import { format } from "date-fns";
 
 const COLORS = ["#3b82f6", "#ef4444", "#fbbf24"]; // Protein (Blue), fats (Red), Carbs (Yellow)
 
@@ -20,6 +34,16 @@ export default function HealthPage() {
     const [healthMetrics, setHealthMetrics] = useState<HealthMetric | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isMetricOpen, setIsMetricOpen] = useState(false);
+
+    // Trend & Preferences State
+    const [trendDays, setTrendDays] = useState<30 | 90 | 180>(30);
+    const [healthTrend, setHealthTrend] = useState<HealthTrendPoint[]>([]);
+    const [calorieTrend, setCalorieTrend] = useState<DailyCalorieSummary[]>([]);
+    const [preferences, setPreferences] = useState<UserPreferences | null>(null);
+    const [isGoalOpen, setIsGoalOpen] = useState(false);
+    const [goalCalories, setGoalCalories] = useState("");
+    const [goalProtein, setGoalProtein] = useState("");
+    const [isTrendLoading, setIsTrendLoading] = useState(false);
 
     // New Metric State
     const [weight, setWeight] = useState("");
@@ -30,20 +54,29 @@ export default function HealthPage() {
 
     useEffect(() => {
         loadData();
+        loadTrendData(30);
     }, []);
 
     async function loadData() {
         try {
-            const [logs, metrics] = await Promise.all([
+            const [logs, metrics, prefs] = await Promise.all([
                 getFoodLogs(today),
-                getHealthMetrics(today)
+                getHealthMetrics(today),
+                getUserPreferences()
             ]);
             setFoodLogs(logs);
             setHealthMetrics(metrics);
+            setPreferences(prefs);
+
             if (metrics) {
                 setWeight(metrics.weight?.toString() || "");
                 setSleep(metrics.sleep_hours?.toString() || "");
                 setWater(metrics.water_intake?.toString() || "");
+            }
+
+            if (prefs) {
+                setGoalCalories(prefs.calorie_goal.toString());
+                setGoalProtein(prefs.protein_goal.toString());
             }
         } catch (error) {
             console.error("Failed to load health data", error);
@@ -51,6 +84,43 @@ export default function HealthPage() {
             setIsLoading(false);
         }
     }
+
+    async function loadTrendData(days: number) {
+        setIsTrendLoading(true);
+        try {
+            const [trend, calories] = await Promise.all([
+                getHealthTrend(days),
+                getDailyCalorieTotals(days)
+            ]);
+            setHealthTrend(trend);
+            setCalorieTrend(calories);
+        } catch (error) {
+            console.error("Failed to load trend data", error);
+        } finally {
+            setIsTrendLoading(false);
+        }
+    }
+
+    const handleWindowChange = (days: 30 | 90 | 180) => {
+        setTrendDays(days);
+        loadTrendData(days);
+    };
+
+    const handleSaveGoals = async () => {
+        try {
+            const prefs = await saveUserPreferences({
+                calorie_goal: parseInt(goalCalories),
+                protein_goal: parseInt(goalProtein)
+            });
+            if (prefs) {
+                setPreferences(prefs);
+                toast.success("Health goals updated");
+                setIsGoalOpen(false);
+            }
+        } catch (error) {
+            toast.error("Failed to update goals");
+        }
+    };
 
     // Manual Food Entry State
     const [isFoodOpen, setIsFoodOpen] = useState(false);
@@ -410,6 +480,214 @@ export default function HealthPage() {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Calorie Goal Progress */}
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                    <CardTitle>🔥 Today&apos;s Calorie Goal</CardTitle>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-primary"
+                        onClick={() => {
+                            setGoalCalories(preferences?.calorie_goal?.toString() || "2000");
+                            setGoalProtein(preferences?.protein_goal?.toString() || "150");
+                            setIsGoalOpen(true);
+                        }}
+                    >
+                        Edit Goal
+                    </Button>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                            <span className="font-medium text-muted-foreground">{totalCalories} kcal consumed</span>
+                            <span className="font-bold">Goal: {preferences?.calorie_goal ?? 2000} kcal</span>
+                        </div>
+                        <Progress value={(totalCalories / (preferences?.calorie_goal ?? 2000)) * 100} className="h-3" />
+                    </div>
+                    <div className="flex justify-between items-center p-3 rounded-lg bg-blue-50/50 border border-blue-100">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">P</div>
+                            <div>
+                                <p className="text-xs text-muted-foreground">Protein Progress</p>
+                                <p className="font-bold">{totalProtein}g / {preferences?.protein_goal ?? 150}g</p>
+                            </div>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-xs font-medium text-blue-600">
+                                {Math.round((totalProtein / (preferences?.protein_goal ?? 150)) * 100)}%
+                            </p>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Health Trends */}
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between">
+                        <CardTitle>📈 Health Trends</CardTitle>
+                        <div className="flex gap-1">
+                            {[30, 90, 180].map((days) => (
+                                <button
+                                    key={days}
+                                    onClick={() => handleWindowChange(days as 30 | 90 | 180)}
+                                    className={`px-2 py-1 rounded text-[10px] font-bold transition-colors ${trendDays === days
+                                            ? "bg-primary text-primary-foreground"
+                                            : "bg-muted hover:bg-accent"
+                                        }`}
+                                >
+                                    {days === 180 ? "6m" : `${days}d`}
+                                </button>
+                            ))}
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        {isTrendLoading ? (
+                            <div className="h-[200px] flex items-center justify-center">
+                                <Activity className="h-8 w-8 animate-spin text-muted-foreground/20" />
+                            </div>
+                        ) : healthTrend.length > 0 ? (
+                            <div className="h-[200px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={healthTrend}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                                        <XAxis
+                                            dataKey="date"
+                                            tickFormatter={(d) => format(new Date(d), "MMM d")}
+                                            tick={{ fontSize: 10 }}
+                                            axisLine={false}
+                                            tickLine={false}
+                                        />
+                                        <YAxis yAxisId="left" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                                        <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                                        <RechartsTooltip
+                                            contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
+                                        />
+                                        <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '10px' }} />
+                                        <Line
+                                            yAxisId="left"
+                                            type="monotone"
+                                            dataKey="weight"
+                                            stroke="#3b82f6"
+                                            strokeWidth={2}
+                                            name="Weight (kg)"
+                                            connectNulls
+                                            dot={false}
+                                        />
+                                        <Line
+                                            yAxisId="right"
+                                            type="monotone"
+                                            dataKey="sleep_hours"
+                                            stroke="#8b5cf6"
+                                            strokeWidth={2}
+                                            name="Sleep (hrs)"
+                                            connectNulls
+                                            dot={false}
+                                        />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </div>
+                        ) : (
+                            <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
+                                Not enough data for trends
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* Daily Calories vs Goal */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>📊 Daily Calories vs Goal</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        {isTrendLoading ? (
+                            <div className="h-[200px] flex items-center justify-center">
+                                <Flame className="h-8 w-8 animate-spin text-muted-foreground/20" />
+                            </div>
+                        ) : calorieTrend.length > 0 ? (
+                            <div className="h-[200px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={calorieTrend}>
+                                        <defs>
+                                            <linearGradient id="colorCal" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#f97316" stopOpacity={0.3} />
+                                                <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                                        <XAxis
+                                            dataKey="date"
+                                            tickFormatter={(d) => format(new Date(d), "MMM d")}
+                                            tick={{ fontSize: 10 }}
+                                            axisLine={false}
+                                            tickLine={false}
+                                        />
+                                        <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                                        <RechartsTooltip
+                                            contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
+                                        />
+                                        <ReferenceLine
+                                            y={preferences?.calorie_goal ?? 2000}
+                                            stroke="#ef4444"
+                                            strokeDasharray="4 4"
+                                            label={{ value: "Goal", position: "right", fill: "#ef4444", fontSize: 10 }}
+                                        />
+                                        <Area
+                                            type="monotone"
+                                            dataKey="totalCalories"
+                                            name="Calories"
+                                            stroke="#f97316"
+                                            strokeWidth={2}
+                                            fillOpacity={1}
+                                            fill="url(#colorCal)"
+                                        />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </div>
+                        ) : (
+                            <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
+                                No logs found for this period
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Goal Edit Dialog */}
+            <Dialog open={isGoalOpen} onOpenChange={setIsGoalOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Edit Nutrition Goals</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Daily Calorie Goal (kcal)</Label>
+                            <Input
+                                type="number"
+                                value={goalCalories}
+                                onChange={(e) => setGoalCalories(e.target.value)}
+                                placeholder="2000"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Daily Protein Goal (g)</Label>
+                            <Input
+                                type="number"
+                                value={goalProtein}
+                                onChange={(e) => setGoalProtein(e.target.value)}
+                                placeholder="150"
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsGoalOpen(false)}>Cancel</Button>
+                        <Button onClick={handleSaveGoals}>Save Goals</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

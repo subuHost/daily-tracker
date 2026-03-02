@@ -15,6 +15,8 @@ import {
     MoreVertical,
     Edit2,
     Trash2,
+    RefreshCw,
+    Clock,
 } from "lucide-react";
 import {
     DropdownMenu,
@@ -39,11 +41,15 @@ import {
 import { formatCurrency } from "@/lib/utils";
 import { getInvestments, getInvestmentSummary, updateInvestment, deleteInvestment, type Investment } from "@/lib/db";
 import { toast } from "sonner";
+import { fetchLivePrices } from "@/app/actions/finance";
+import { formatDistanceToNow } from "date-fns";
 
 export default function InvestmentsPage() {
     const [investments, setInvestments] = useState<Investment[]>([]);
     const [summary, setSummary] = useState({ totalInvested: 0, currentValue: 0, totalGain: 0, gainPercent: 0 });
     const [isLoading, setIsLoading] = useState(true);
+    const [isUpdatingPrices, setIsUpdatingPrices] = useState(false);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
     // Edit state
     const [editingInvestment, setEditingInvestment] = useState<Investment | null>(null);
@@ -67,6 +73,11 @@ export default function InvestmentsPage() {
                 ]);
                 setInvestments(data);
                 setSummary(summaryData);
+
+                // Fetch live prices in the background after initial load
+                if (data.length > 0) {
+                    refreshPrices(data);
+                }
             } catch (error) {
                 console.error("Failed to load investments:", error);
             } finally {
@@ -75,6 +86,35 @@ export default function InvestmentsPage() {
         }
         loadInvestments();
     }, []);
+
+    const refreshPrices = async (targetInvestments: Investment[]) => {
+        setIsUpdatingPrices(true);
+        try {
+            const priceMap = await fetchLivePrices(targetInvestments.map(inv => ({
+                id: inv.id,
+                symbol: inv.symbol,
+                type: inv.type
+            })));
+
+            if (Object.keys(priceMap).length > 0) {
+                // Update local state
+                setInvestments(prev => prev.map(inv => ({
+                    ...inv,
+                    current_price: priceMap[inv.id] || inv.current_price
+                })));
+
+                // Recalculate summary
+                const newSummary = await getInvestmentSummary();
+                setSummary(newSummary);
+                setLastUpdated(new Date());
+            }
+        } catch (error) {
+            console.error("Price refresh failed:", error);
+            toast.error("Failed to update some prices");
+        } finally {
+            setIsUpdatingPrices(false);
+        }
+    };
 
     const handleEditClick = (investment: Investment) => {
         setEditingInvestment(investment);
@@ -155,16 +195,34 @@ export default function InvestmentsPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Investments</h1>
-                    <p className="text-muted-foreground text-sm">
+                    <p className="text-muted-foreground text-sm flex items-center gap-2">
                         Track your portfolio
+                        {lastUpdated && (
+                            <span className="text-[10px] text-muted-foreground flex items-center gap-1 bg-muted px-2 py-0.5 rounded-full">
+                                <Clock className="h-3 w-3" />
+                                Updated {formatDistanceToNow(lastUpdated)} ago
+                            </span>
+                        )}
                     </p>
                 </div>
-                <Button asChild className="w-full sm:w-auto">
-                    <Link href="/finance/investments/new">
-                        <Plus className="mr-2 h-4 w-4" />
-                        Add Investment
-                    </Link>
-                </Button>
+                <div className="flex gap-2 w-full sm:w-auto">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => refreshPrices(investments)}
+                        disabled={isUpdatingPrices || investments.length === 0}
+                        className="flex-1 sm:flex-none"
+                    >
+                        <RefreshCw className={`mr-2 h-4 w-4 ${isUpdatingPrices ? "animate-spin" : ""}`} />
+                        {isUpdatingPrices ? "Updating..." : "Refresh Prices"}
+                    </Button>
+                    <Button asChild className="flex-1 sm:flex-none">
+                        <Link href="/finance/investments/new">
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add Investment
+                        </Link>
+                    </Button>
+                </div>
             </div>
 
             {/* Summary Cards */}

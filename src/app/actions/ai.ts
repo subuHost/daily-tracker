@@ -5,6 +5,43 @@ import { logFood, logHealthMetrics, getHealthMetrics, type FoodLog } from "@/lib
 import { getHabits, toggleHabitToday } from "@/lib/db/habits";
 import { createTask } from "@/lib/db/tasks";
 import { getGeminiClient, hasApiKeys } from "@/lib/ai/gemini-client";
+import { getChatHistory, saveChatMessage, clearChatHistory } from "@/lib/db/chat";
+
+// ─── Cross-Domain Context Types ──────────────────────────────────────────
+export interface DailyContext {
+    finance: {
+        budgetUsedPct: number | null;
+        topCategories: string[];
+        monthSpend: number;
+        budget: number | null;
+    };
+    health: {
+        calories: number;
+        calorieGoal: number;
+        protein: number;
+        sleep: number | null;
+        water: number | null;
+    };
+    habits: {
+        completedToday: number;
+        totalToday: number;
+        pendingToday: string[];
+        atRiskStreaks: string[];
+    };
+    mood: {
+        todayMood: number | null;
+        yesterdayNotes: string | null;
+    };
+    tasks: {
+        overdueCount: number;
+        dueTodayTitles: string[];
+        highPriorityOpen: number;
+    };
+    study: {
+        dueForReviewCount: number;
+        topicsDue: string[];
+    };
+}
 
 export interface Message {
     role: "user" | "assistant" | "system";
@@ -125,7 +162,7 @@ const tools = {
     ]
 };
 
-export async function chatWithAI(history: Message[]) {
+export async function chatWithAI(history: Message[], userContext?: string) {
     const genAI = getGeminiClient();
 
     if (!genAI) {
@@ -150,10 +187,16 @@ export async function chatWithAI(history: Message[]) {
         // Prepare history with System Prompt injected as the first user message
         let chatHistory: any[] = [];
 
+        // Build system prompt with optional context injection
+        let fullSystemPrompt = SYSTEM_PROMPT;
+        if (userContext) {
+            fullSystemPrompt += `\n\nHere is the user's current life snapshot for context. Use this to give more relevant, personalised answers:\n${userContext}`;
+        }
+
         // Add System Prompt
         chatHistory.push({
             role: "user",
-            parts: [{ text: "System System: " + SYSTEM_PROMPT }]
+            parts: [{ text: "System: " + fullSystemPrompt }]
         });
 
         // Add a dummy model acknowledgement to maintain turn-taking (User -> Model -> User)
@@ -262,18 +305,35 @@ export async function chatWithAI(history: Message[]) {
                 output = { success: true, results: pastMeals };
             }
 
-            // Send function result back to model to get final response
-            // For simplicity in this widget, we can just return the result text as the assistant response
-            // Or we can feed it back. Let's return the result text directly to keep it fast.
+            // Persist the user message and assistant response to DB
+            try {
+                await saveChatMessage("user", lastMessage.content, supabase);
+                await saveChatMessage("assistant", resultText, supabase);
+            } catch (persistError) {
+                console.error("Failed to persist chat messages:", persistError);
+            }
+
             return {
                 role: "assistant",
                 content: resultText
             };
         }
 
+        const assistantContent = response.text();
+
+        // Persist the user message and assistant response to DB
+        try {
+            const { createClient } = await import("@/lib/supabase/server");
+            const supabase = createClient();
+            await saveChatMessage("user", lastMessage.content, supabase);
+            await saveChatMessage("assistant", assistantContent, supabase);
+        } catch (persistError) {
+            console.error("Failed to persist chat messages:", persistError);
+        }
+
         return {
             role: "assistant",
-            content: response.text()
+            content: assistantContent
         };
 
     } catch (error: any) {
@@ -451,3 +511,385 @@ Always provide integer values for nutritional data.`;
     };
 }
 
+// Load chat history for the current user (called by ChatWidget on mount)
+export async function loadChatHistory(): Promise<Message[]> {
+    try {
+        const { createClient } = await import("@/lib/supabase/server");
+        const supabase = createClient();
+        const rows = await getChatHistory(supabase, 50);
+        return rows.map(row => ({
+            role: row.role as "user" | "assistant",
+            content: row.content,
+        }));
+    } catch (error) {
+        console.error("Failed to load chat history:", error);
+        return [];
+    }
+}
+
+// ─── Cross-Domain Context Aggregation ────────────────────────────────────
+// Runs 6 parallel Supabase queries and returns a typed DailyContext object
+export async function getDailyContext(): Promise<DailyContext> {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const today = new Date().toISOString().split("T")[0];
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+    const now = new Date();
+    const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const endDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${lastDay}`;
+
+    // Run 6 domain queries in parallel
+    const [tasksResult, habitsResult, budgetResult, expensesResult, foodResult, journalResult] = await Promise.all([
+        // 1. Tasks
+        supabase.from("tasks").select("id, title, due_date, priority").eq("user_id", user.id).eq("completed", false),
+        // 2. Habits
+        getHabits(supabase),
+        // 3. Budget
+        supabase.from("budgets").select("amount").eq("user_id", user.id).eq("month", monthStr).single(),
+        // 4. Expenses
+        supabase.from("transactions").select("amount, description").eq("user_id", user.id).eq("type", "expense").gte("date", monthStr).lte("date", endDate),
+        // 5. Food logs
+        supabase.from("food_logs").select("calories, protein").eq("user_id", user.id).eq("date", today),
+        // 6. Journal (today + yesterday)
+        supabase.from("daily_entries").select("mood, notes, date").eq("user_id", user.id).in("date", [today, yesterday]),
+    ]);
+
+    // 7. Study (SRS due) — may not have the columns, handled gracefully
+    let studyProblems: any[] = [];
+    try {
+        const { data: studyData } = await supabase.from("problems").select("id, title, topic").eq("user_id", user.id).lte("next_review_at", now.toISOString());
+        studyProblems = studyData || [];
+    } catch {
+        // Table or column may not exist — ignore
+    }
+
+    const incompleteTasks: any[] = tasksResult.data || [];
+    const overdueTasks = incompleteTasks.filter((t: any) => t.due_date && t.due_date < today);
+    const dueTodayTasks = incompleteTasks.filter((t: any) => t.due_date === today);
+    const highPriorityTasks = incompleteTasks.filter((t: any) => t.priority === "high");
+
+    const habits = habitsResult;
+    const completedHabits = habits.filter((h: any) => h.completedToday);
+    const pendingHabits = habits.filter((h: any) => !h.completedToday);
+    const atRiskStreaks = habits.filter((h: any) => h.streak >= 3 && !h.completedToday).map((h: any) => h.name);
+
+    const budget = budgetResult.data?.amount ? Number(budgetResult.data.amount) : null;
+    const spent = (expensesResult.data || []).reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+    const budgetUsedPct = budget && budget > 0 ? Math.round((spent / budget) * 100) : null;
+
+    const foodLogs: any[] = foodResult.data || [];
+    const totalCalories = foodLogs.reduce((sum: number, f: any) => sum + Number(f.calories || 0), 0);
+    const totalProtein = foodLogs.reduce((sum: number, f: any) => sum + Number(f.protein || 0), 0);
+
+    const journalEntries: any[] = journalResult.data || [];
+    const todayEntry = journalEntries.find((e: any) => e.date === today);
+    const yesterdayEntry = journalEntries.find((e: any) => e.date === yesterday);
+
+    return {
+        finance: {
+            budgetUsedPct,
+            topCategories: [],
+            monthSpend: spent,
+            budget,
+        },
+        health: {
+            calories: totalCalories,
+            calorieGoal: 2000,
+            protein: totalProtein,
+            sleep: null,
+            water: null,
+        },
+        habits: {
+            completedToday: completedHabits.length,
+            totalToday: habits.length,
+            pendingToday: pendingHabits.map((h: any) => h.name),
+            atRiskStreaks,
+        },
+        mood: {
+            todayMood: todayEntry?.mood ?? null,
+            yesterdayNotes: yesterdayEntry?.notes ?? null,
+        },
+        tasks: {
+            overdueCount: overdueTasks.length,
+            dueTodayTitles: dueTodayTasks.map((t: any) => t.title),
+            highPriorityOpen: highPriorityTasks.length,
+        },
+        study: {
+            dueForReviewCount: studyProblems.length,
+            topicsDue: studyProblems.slice(0, 5).map((p: any) => p.topic || p.title),
+        },
+    };
+}
+
+// Serialize DailyContext into a human-readable string for the AI system prompt
+function serializeDailyContext(ctx: DailyContext): string {
+    const parts: string[] = [];
+
+    // Tasks
+    parts.push(`Tasks: ${ctx.tasks.dueTodayTitles.length} due today, ${ctx.tasks.overdueCount} overdue, ${ctx.tasks.highPriorityOpen} high-priority open.`);
+    if (ctx.tasks.dueTodayTitles.length > 0) {
+        parts.push(`  Due today: ${ctx.tasks.dueTodayTitles.join(", ")}`);
+    }
+
+    // Habits
+    parts.push(`Habits: ${ctx.habits.completedToday}/${ctx.habits.totalToday} completed today.`);
+    if (ctx.habits.atRiskStreaks.length > 0) {
+        parts.push(`  Streaks at risk: ${ctx.habits.atRiskStreaks.join(", ")}`);
+    }
+
+    // Finance
+    if (ctx.finance.budget !== null && ctx.finance.budget > 0 && ctx.finance.budgetUsedPct !== null) {
+        parts.push(`Budget: ₹${ctx.finance.monthSpend.toFixed(0)} spent of ₹${ctx.finance.budget.toFixed(0)} this month (${ctx.finance.budgetUsedPct}% used).`);
+    } else {
+        parts.push(`Spending: ₹${ctx.finance.monthSpend.toFixed(0)} this month${ctx.finance.budget === 0 ? " (budget set to ₹0)" : " (no budget set)"}.`);
+    }
+
+    // Health
+    parts.push(`Nutrition: ${ctx.health.calories} kcal, ${ctx.health.protein}g protein logged today.`);
+
+    // Journal mood
+    if (ctx.mood.todayMood !== null) {
+        parts.push(`Mood today: ${ctx.mood.todayMood}/5.`);
+    }
+
+    // Study
+    if (ctx.study.dueForReviewCount > 0) {
+        parts.push(`Study: ${ctx.study.dueForReviewCount} problem(s) due for review.`);
+    }
+
+    return parts.join("\n");
+}
+
+// ─── Daily Briefing with Caching ─────────────────────────────────────────
+export async function generateDailyBriefing(): Promise<{ briefing: string }> {
+    const genAI = getGeminiClient();
+
+    try {
+        const { createClient } = await import("@/lib/supabase/server");
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { briefing: "Please sign in to see your daily briefing." };
+
+        const today = new Date().toISOString().split("T")[0];
+
+        // 1. Check cache first
+        const { data: cached } = await supabase
+            .from("daily_briefings")
+            .select("content")
+            .eq("user_id", user.id)
+            .eq("date", today)
+            .single();
+
+        if (cached?.content) {
+            return { briefing: cached.content };
+        }
+
+        // 2. Get cross-domain context
+        const ctx = await getDailyContext();
+        const contextString = serializeDailyContext(ctx);
+
+        // 3. Try AI generation, fall back to deterministic if no API key or failure
+        let briefing: string;
+
+        if (genAI) {
+            try {
+                const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+                const prompt = `You are a concise, motivational personal assistant. Based on the user's data snapshot below, write a 3-4 sentence morning briefing. Be encouraging but realistic. Mention specific numbers. Do NOT use markdown formatting — plain text only.\n\nUser data:\n${contextString}`;
+                const result = await model.generateContent(prompt);
+                briefing = result.response.text().trim();
+            } catch (aiError) {
+                console.error("Gemini briefing generation failed, using fallback:", aiError);
+                briefing = buildFallbackBriefing(ctx);
+            }
+        } else {
+            briefing = buildFallbackBriefing(ctx);
+        }
+
+        // 4. Cache the result
+        try {
+            await supabase.from("daily_briefings").insert({
+                user_id: user.id,
+                date: today,
+                content: briefing,
+                context_snapshot: ctx,
+            });
+        } catch (cacheError) {
+            console.error("Failed to cache briefing:", cacheError);
+        }
+
+        return { briefing };
+    } catch (error: any) {
+        console.error("Daily briefing error:", error);
+        return { briefing: "Could not generate your briefing right now. Check back later!" };
+    }
+}
+
+// Deterministic fallback briefing when Gemini is unavailable
+function buildFallbackBriefing(ctx: DailyContext): string {
+    const parts: string[] = [];
+
+    if (ctx.tasks.dueTodayTitles.length > 0) {
+        parts.push(`You have ${ctx.tasks.dueTodayTitles.length} task(s) due today.`);
+    }
+    if (ctx.tasks.overdueCount > 0) {
+        parts.push(`${ctx.tasks.overdueCount} task(s) are overdue.`);
+    }
+    parts.push(`Habits: ${ctx.habits.completedToday}/${ctx.habits.totalToday} completed.`);
+    if (ctx.finance.budget !== null && ctx.finance.budget > 0 && ctx.finance.budgetUsedPct !== null) {
+        parts.push(`Budget at ${ctx.finance.budgetUsedPct}% for the month.`);
+    }
+    parts.push(`${ctx.health.calories} kcal logged so far today.`);
+
+    return parts.join(" ");
+}
+
+// ─── Server Actions for Chat & Briefing ──────────────────────────────────
+
+// Persist image-based chat messages (user + assistant) to the database
+export async function persistImageChatMessages(
+    userContent: string,
+    assistantContent: string
+): Promise<void> {
+    try {
+        const { createClient } = await import("@/lib/supabase/server");
+        const supabase = createClient();
+        await saveChatMessage("user", userContent, supabase);
+        await saveChatMessage("assistant", assistantContent, supabase);
+    } catch (error) {
+        console.error("Failed to persist image chat messages:", error);
+    }
+}
+
+// Clear all chat history for the current user
+export async function clearChatHistoryAction(): Promise<void> {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = createClient();
+    await clearChatHistory(supabase);
+}
+
+// Get serialized daily context for chat context injection
+export async function getDailyContextAction(): Promise<string> {
+    try {
+        const ctx = await getDailyContext();
+        return serializeDailyContext(ctx);
+    } catch (error) {
+        console.error("Failed to get daily context:", error);
+        return "";
+    }
+}
+
+// Refresh the daily briefing (delete cached + regenerate)
+export async function refreshBriefingAction(): Promise<{ briefing: string }> {
+    try {
+        const { createClient } = await import("@/lib/supabase/server");
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { briefing: "Please sign in." };
+
+        const today = new Date().toISOString().split("T")[0];
+
+        // Delete today's cached briefing
+        await supabase
+            .from("daily_briefings")
+            .delete()
+            .eq("user_id", user.id)
+            .eq("date", today);
+
+        // Regenerate
+        return await generateDailyBriefing();
+    } catch (error) {
+        console.error("Refresh briefing error:", error);
+        return { briefing: "Could not refresh briefing. Try again later." };
+    }
+}
+
+/**
+ * Suggests a category for an expense based on its description.
+ */
+export async function suggestCategory(description: string): Promise<string | null> {
+    const genAI = getGeminiClient();
+    if (!genAI || !description) return null;
+
+    try {
+        const { createClient } = await import("@/lib/supabase/server");
+        const supabase = createClient();
+
+        const { getCategories } = await import("@/lib/db/categories");
+        const categories = await getCategories("expense");
+
+        if (categories.length === 0) return null;
+
+        const categoryNames = categories.map(c => c.name);
+
+        const model = genAI.getGenerativeModel({
+            model: "gemini-flash-latest",
+            generationConfig: {
+                temperature: 0.1, // Low temperature for consistent classification
+            }
+        });
+
+        const prompt = `Task: Categorize a financial expense.
+        Expense Description: "${description}"
+        Available Categories: ${categoryNames.join(", ")}
+        
+        Rule: Return ONLY the exact name of the best matching category from the list provided. Do not provide any explanation or extra text. If no category is a good match, return null.`;
+
+        const result = await model.generateContent(prompt);
+        const suggestion = result.response.text().trim();
+
+        if (suggestion.toLowerCase() === 'null') return null;
+
+        const matched = categories.find(c => c.name.toLowerCase() === suggestion.toLowerCase());
+        return matched ? matched.id : null;
+    } catch (error) {
+        console.error("AI Category Suggestion Error:", error);
+        return null;
+    }
+}
+
+/**
+ * Generates a structured hint for a study problem using Gemini.
+ */
+export async function generateHint(problem: any, userNotes?: string): Promise<{ intuition: string; pattern: string; complexityTarget: string } | null> {
+    const genAI = getGeminiClient();
+    if (!genAI) return null;
+
+    try {
+        const model = genAI.getGenerativeModel({
+            model: "gemini-flash-latest",
+        });
+
+        const prompt = `You are a technical interview coach. Provide a structured hint for the following problem without revealing the full solution.
+
+Problem: ${problem.title}
+Difficulty: ${problem.difficulty || problem.difficulty_official}
+Topic: ${problem.topic_category}
+Tags/Patterns: ${problem.tags_pattern?.join(', ') || 'None'}
+User's Notes: ${userNotes || 'None'}
+
+Your response must be in this exact JSON format:
+{
+  "intuition": "A one-sentence clue about the approach direction.",
+  "pattern": "The data structure or algorithmic pattern to consider.",
+  "complexityTarget": "The time and space complexity to aim for (e.g., O(n) time, O(1) space)."
+}
+
+Constraint: Do not provide code examples or the final solution text.`;
+
+        const result = await model.generateContent(prompt);
+        const response = result.response.text();
+
+        const jsonMatch = response.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            return JSON.parse(jsonMatch[0]);
+        }
+        return null;
+    } catch (error) {
+        console.error("AI Hint Generation Error:", error);
+        return null;
+    }
+}
