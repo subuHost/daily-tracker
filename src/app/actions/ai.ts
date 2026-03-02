@@ -5,6 +5,7 @@ import { logFood, logHealthMetrics, getHealthMetrics, type FoodLog } from "@/lib
 import { getHabits, toggleHabitToday } from "@/lib/db/habits";
 import { createTask } from "@/lib/db/tasks";
 import { getGeminiClient, hasApiKeys } from "@/lib/ai/gemini-client";
+import { getChatHistory, saveChatMessage } from "@/lib/db/chat";
 
 export interface Message {
     role: "user" | "assistant" | "system";
@@ -262,18 +263,35 @@ export async function chatWithAI(history: Message[]) {
                 output = { success: true, results: pastMeals };
             }
 
-            // Send function result back to model to get final response
-            // For simplicity in this widget, we can just return the result text as the assistant response
-            // Or we can feed it back. Let's return the result text directly to keep it fast.
+            // Persist the user message and assistant response to DB
+            try {
+                await saveChatMessage("user", lastMessage.content, supabase);
+                await saveChatMessage("assistant", resultText, supabase);
+            } catch (persistError) {
+                console.error("Failed to persist chat messages:", persistError);
+            }
+
             return {
                 role: "assistant",
                 content: resultText
             };
         }
 
+        const assistantContent = response.text();
+
+        // Persist the user message and assistant response to DB
+        try {
+            const { createClient } = await import("@/lib/supabase/server");
+            const supabase = createClient();
+            await saveChatMessage("user", lastMessage.content, supabase);
+            await saveChatMessage("assistant", assistantContent, supabase);
+        } catch (persistError) {
+            console.error("Failed to persist chat messages:", persistError);
+        }
+
         return {
             role: "assistant",
-            content: response.text()
+            content: assistantContent
         };
 
     } catch (error: any) {
@@ -451,3 +469,112 @@ Always provide integer values for nutritional data.`;
     };
 }
 
+// Load chat history for the current user (called by ChatWidget on mount)
+export async function loadChatHistory(): Promise<Message[]> {
+    try {
+        const { createClient } = await import("@/lib/supabase/server");
+        const supabase = createClient();
+        const rows = await getChatHistory(supabase, 50);
+        return rows.map(row => ({
+            role: row.role as "user" | "assistant",
+            content: row.content,
+        }));
+    } catch (error) {
+        console.error("Failed to load chat history:", error);
+        return [];
+    }
+}
+
+// Generate an AI daily briefing from cross-domain data
+export async function generateDailyBriefing(): Promise<{ briefing: string }> {
+    const genAI = getGeminiClient();
+    if (!genAI) {
+        return { briefing: "AI briefing is unavailable — no API key configured." };
+    }
+
+    try {
+        const { createClient } = await import("@/lib/supabase/server");
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { briefing: "Please sign in to see your daily briefing." };
+
+        const today = new Date().toISOString().split("T")[0];
+        const now = new Date();
+
+        // 1. Tasks — incomplete count + overdue
+        const { data: tasks } = await supabase
+            .from("tasks")
+            .select("id, title, due_date, priority")
+            .eq("user_id", user.id)
+            .eq("completed", false);
+
+        const incompleteTasks = tasks || [];
+        const overdueTasks = incompleteTasks.filter(t => t.due_date && t.due_date < today);
+        const dueTodayTasks = incompleteTasks.filter(t => t.due_date === today);
+
+        // 2. Habits — today's completion
+        const habits = await getHabits(supabase);
+        const completedHabits = habits.filter(h => h.completedToday).length;
+        const totalHabits = habits.length;
+
+        // 3. Budget vs spent this month
+        const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        const endDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${lastDay}`;
+
+        const { data: budgetData } = await supabase
+            .from("budgets")
+            .select("amount")
+            .eq("user_id", user.id)
+            .eq("month", monthStr)
+            .single();
+
+        const { data: expenses } = await supabase
+            .from("transactions")
+            .select("amount")
+            .eq("user_id", user.id)
+            .eq("type", "expense")
+            .gte("date", monthStr)
+            .lte("date", endDate);
+
+        const budget = budgetData?.amount ? Number(budgetData.amount) : null;
+        const spent = (expenses || []).reduce((sum, t) => sum + Number(t.amount), 0);
+
+        // 4. Today's calories
+        const { data: foodLogs } = await supabase
+            .from("food_logs")
+            .select("calories")
+            .eq("user_id", user.id)
+            .eq("date", today);
+
+        const totalCalories = (foodLogs || []).reduce((sum, f) => sum + Number(f.calories || 0), 0);
+
+        // Build context string
+        const contextParts: string[] = [];
+        contextParts.push(`Tasks: ${incompleteTasks.length} incomplete, ${dueTodayTasks.length} due today, ${overdueTasks.length} overdue.`);
+        contextParts.push(`Habits: ${completedHabits}/${totalHabits} completed today.`);
+        if (budget !== null) {
+            contextParts.push(`Budget: ₹${spent.toFixed(0)} spent of ₹${budget.toFixed(0)} this month (${Math.round((spent / budget) * 100)}% used).`);
+        } else {
+            contextParts.push(`Spending: ₹${spent.toFixed(0)} this month (no budget set).`);
+        }
+        contextParts.push(`Nutrition: ${totalCalories} kcal logged today so far.`);
+
+        const contextString = contextParts.join("\n");
+
+        // Call Gemini
+        const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+        const prompt = `You are a concise, motivational personal assistant. Based on the user's data snapshot below, write a 3-4 sentence morning briefing. Be encouraging but realistic. Mention specific numbers. Do NOT use markdown formatting — plain text only.
+
+User data:
+${contextString}`;
+
+        const result = await model.generateContent(prompt);
+        const briefing = result.response.text().trim();
+
+        return { briefing };
+    } catch (error: any) {
+        console.error("Daily briefing error:", error);
+        return { briefing: "Could not generate your briefing right now. Check back later!" };
+    }
+}

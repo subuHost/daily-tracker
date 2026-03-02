@@ -6,11 +6,16 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { MessageCircle, X, Send, Sparkles, User, Bot, Loader2, Camera, ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { chatWithAI, analyzeAndLogFoodImage, type Message } from "@/app/actions/ai";
+import { chatWithAI, analyzeAndLogFoodImage, loadChatHistory, type Message } from "@/app/actions/ai";
 
 interface ChatMessage extends Message {
     imagePreview?: string; // For displaying image in chat
 }
+
+const WELCOME_MESSAGE: ChatMessage = {
+    role: "assistant",
+    content: "Hi! I'm your AI health & productivity assistant. How can I help you today? You can also tap the 📷 button to log food by photo!"
+};
 
 // Compress image to reduce file size
 async function compressImage(file: File, maxWidth: number = 1024, quality: number = 0.7): Promise<string> {
@@ -60,13 +65,30 @@ async function compressImage(file: File, maxWidth: number = 1024, quality: numbe
 
 export function ChatWidget() {
     const [isOpen, setIsOpen] = useState(false);
-    const [messages, setMessages] = useState<ChatMessage[]>([
-        { role: "assistant", content: "Hi! I'm your AI health & productivity assistant. How can I help you today? You can also tap the 📷 button to log food by photo!" }
-    ]);
+    const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
+    const [isLoadingHistory, setIsLoadingHistory] = useState(true);
     const scrollRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const historyLoaded = useRef(false);
+
+    // Load persisted chat history on mount
+    useEffect(() => {
+        if (historyLoaded.current) return;
+        historyLoaded.current = true;
+
+        loadChatHistory().then((history) => {
+            if (history.length > 0) {
+                setMessages(history as ChatMessage[]);
+            }
+            // If no history, keep the default welcome message
+        }).catch((err) => {
+            console.error("Failed to load chat history:", err);
+        }).finally(() => {
+            setIsLoadingHistory(false);
+        });
+    }, []);
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -181,7 +203,12 @@ export function ChatWidget() {
                     </CardHeader>
 
                     <CardContent ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
-                        {messages.map((m, i) => (
+                        {isLoadingHistory ? (
+                            <div className="flex items-center justify-center h-full text-muted-foreground text-sm gap-2">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Loading history…
+                            </div>
+                        ) : messages.map((m, i) => (
                             <div
                                 key={i}
                                 className={cn(

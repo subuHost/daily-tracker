@@ -5,6 +5,7 @@ import { ExpensesWidget } from "@/components/dashboard/expenses-widget";
 import { HabitsWidget } from "@/components/dashboard/habits-widget";
 import { NetWorthWidget } from "@/components/dashboard/net-worth-widget";
 import { QuickLinksWidget } from "@/components/dashboard/quick-links-widget";
+import { AIDailyBriefingWidget } from "@/components/dashboard/ai-briefing-widget";
 import { getCurrentBudget, getMonthlySpent, getTransactions } from "@/lib/db";
 import { EventsWidget } from "@/components/widgets/events-widget";
 import { HealthWidget } from "@/components/dashboard/health-widget";
@@ -111,6 +112,11 @@ export default function DashboardPage() {
 
             {/* Widgets Grid with Suspense Boundaries */}
             <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                {/* AI Daily Briefing Widget - Full width banner */}
+                <Suspense fallback={<WidgetSkeleton />}>
+                    <AIDailyBriefingWidget />
+                </Suspense>
+
                 {/* Budget Widget */}
                 <Suspense fallback={<BudgetWidgetSkeleton />}>
                     <BudgetWidgetServer />
