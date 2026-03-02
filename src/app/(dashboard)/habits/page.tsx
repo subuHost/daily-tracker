@@ -36,10 +36,13 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { getHabits, toggleHabitToday, updateHabit, deleteHabit, type HabitWithStats } from "@/lib/db";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { SwipeableListItem } from "@/components/ui/swipeable-list-item";
+import { useHaptic } from "@/hooks/use-haptic";
 
 export default function HabitsPage() {
     const [habits, setHabits] = useState<HabitWithStats[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const haptic = useHaptic();
 
     // Edit/Delete State
     const [editingHabit, setEditingHabit] = useState<HabitWithStats | null>(null);
@@ -72,10 +75,7 @@ export default function HabitsPage() {
         loadHabits();
     }, []);
 
-    const toggleHabit = async (id: string, e: React.MouseEvent) => {
-        // Prevent triggering card click when clicking dropdown
-        e.stopPropagation();
-
+    const toggleHabit = async (id: string) => {
         try {
             const newState = await toggleHabitToday(id);
             setHabits(habits.map((h) =>
@@ -86,6 +86,7 @@ export default function HabitsPage() {
                     completedDays: newState ? h.completedDays + 1 : h.completedDays - 1,
                 } : h
             ));
+            haptic.triggerSuccess();
             toast.success(newState ? "Habit marked complete!" : "Habit unmarked");
         } catch (error) {
             console.error("Failed to toggle habit:", error);
@@ -136,10 +137,11 @@ export default function HabitsPage() {
     const handleDelete = async (id: string) => {
         if (!confirm("Are you sure you want to delete this habit? All history will be lost.")) return;
 
-        setIsActionLoading(true); // technically global loading, but fine for now
+        setIsActionLoading(true);
         try {
             await deleteHabit(id);
             setHabits(habits.filter(h => h.id !== id));
+            haptic.triggerImpact();
             toast.success("Habit deleted");
         } catch (error) {
             console.error("Delete failed:", error);
@@ -151,13 +153,6 @@ export default function HabitsPage() {
 
     const completedToday = habits.filter((h) => h.completedToday).length;
     const totalHabits = habits.length;
-
-    // Generate calendar heatmap data (dummy/static since we don't have full year history locally efficiently yet)
-    // Ideally fetch full stats from DB. But using local logic from filtered habits is limited to "today".
-    // For heatmap, we usually need a separate fetch. For now, keep the simpler view or just show "Last 28 days" if we had that data.
-    // The previous code generated dummy data for last 28 days. I'll keep it as placeholder or remove it?
-    // User requested "maintain logs in calendar", so the heatmap here is redundant if Calendar page exists.
-    // I'll keep it simple: Just show the list.
 
     if (isLoading) {
         return (
@@ -209,90 +204,95 @@ export default function HabitsPage() {
                     {/* Habits List */}
                     <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                         {habits.map((habit) => (
-                            <Card
+                            <SwipeableListItem
                                 key={habit.id}
-                                className={`transition-all ${habit.completedToday
-                                    ? "bg-green-500/10 border-green-500/50"
-                                    : "hover:bg-accent/50"
-                                    }`}
+                                onComplete={() => toggleHabit(habit.id)}
+                                onDelete={() => handleDelete(habit.id)}
+                                showComplete={true}
                             >
-                                <CardContent className="p-4">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-3 flex-1 cursor-pointer" onClick={(e) => toggleHabit(habit.id, e)}>
-                                            <div className="text-2xl sm:text-3xl select-none">{habit.icon}</div>
-                                            <div>
-                                                <p className="font-medium text-sm sm:text-base">{habit.name}</p>
-                                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                                    <Flame className={`h-3 w-3 ${habit.streak > 0 ? "text-orange-500" : "text-muted-foreground"}`} />
-                                                    <span>{habit.streak} day streak</span>
+                                <Card
+                                    className={`transition-all h-full ${habit.completedToday
+                                        ? "bg-green-500/10 border-green-500/50"
+                                        : "hover:bg-accent/50"
+                                        }`}
+                                >
+                                    <CardContent className="p-4">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-3 flex-1 cursor-pointer" onClick={() => toggleHabit(habit.id)}>
+                                                <div className="text-2xl sm:text-3xl select-none">{habit.icon}</div>
+                                                <div>
+                                                    <p className="font-medium text-sm sm:text-base">{habit.name}</p>
+                                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                        <Flame className={`h-3 w-3 ${habit.streak > 0 ? "text-orange-500" : "text-muted-foreground"}`} />
+                                                        <span>{habit.streak} day streak</span>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
 
-                                        <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-2">
+                                                {/* Toggle Button */}
+                                                <div
+                                                    onClick={() => toggleHabit(habit.id)}
+                                                    className={`p-2 rounded-full cursor-pointer transition-colors ${habit.completedToday
+                                                        ? "bg-green-500 text-white"
+                                                        : "bg-muted hover:bg-muted/80"
+                                                        }`}
+                                                >
+                                                    {habit.completedToday ? (
+                                                        <Check className="h-4 w-4" />
+                                                    ) : (
+                                                        <X className="h-4 w-4 text-muted-foreground" />
+                                                    )}
+                                                </div>
 
-                                            {/* Toggle Button */}
-                                            <div
-                                                onClick={(e) => toggleHabit(habit.id, e)}
-                                                className={`p-2 rounded-full cursor-pointer transition-colors ${habit.completedToday
-                                                    ? "bg-green-500 text-white"
-                                                    : "bg-muted hover:bg-muted/80"
-                                                    }`}
-                                            >
-                                                {habit.completedToday ? (
-                                                    <Check className="h-4 w-4" />
-                                                ) : (
-                                                    <X className="h-4 w-4 text-muted-foreground" />
-                                                )}
+                                                {/* Menu */}
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                            <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuItem onClick={() => handleEditClick(habit)}>
+                                                            <Edit2 className="mr-2 h-4 w-4" />
+                                                            Edit
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => handleDelete(habit.id)} className="text-destructive focus:text-destructive">
+                                                            <Trash2 className="mr-2 h-4 w-4" />
+                                                            Delete
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
                                             </div>
-
-                                            {/* Menu */}
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                                                        <MoreVertical className="h-4 w-4 text-muted-foreground" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem onClick={() => handleEditClick(habit)}>
-                                                        <Edit2 className="mr-2 h-4 w-4" />
-                                                        Edit
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => handleDelete(habit.id)} className="text-destructive focus:text-destructive">
-                                                        <Trash2 className="mr-2 h-4 w-4" />
-                                                        Delete
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
                                         </div>
-                                    </div>
 
-                                    {/* Monthly Heatmap */}
-                                    <p className="text-xs text-muted-foreground mt-3 mb-1">Last 12 weeks</p>
-                                    <TooltipProvider>
-                                        <div className="flex flex-wrap gap-1">
-                                            {Array.from({ length: 84 }).map((_, i) => {
-                                                const day = new Date();
-                                                day.setDate(day.getDate() - (83 - i)); // Last 84 days
-                                                const dayStr = day.toISOString().split("T")[0];
-                                                const isCompleted = habit.recentLogs?.includes(dayStr);
-                                                return (
-                                                    <Tooltip key={i}>
-                                                        <TooltipTrigger asChild>
-                                                            <div
-                                                                className={`w-1.5 h-1.5 rounded-sm ${isCompleted ? "bg-green-500" : "bg-muted-foreground/20"}`}
-                                                            />
-                                                        </TooltipTrigger>
-                                                        <TooltipContent>
-                                                            <p className="text-[10px]">{format(day, "MMM d, yyyy")}</p>
-                                                        </TooltipContent>
-                                                    </Tooltip>
-                                                )
-                                            })}
-                                        </div>
-                                    </TooltipProvider>
-                                </CardContent>
-                            </Card>
+                                        {/* Monthly Heatmap */}
+                                        <p className="text-xs text-muted-foreground mt-3 mb-1">Last 12 weeks</p>
+                                        <TooltipProvider>
+                                            <div className="flex flex-wrap gap-1">
+                                                {Array.from({ length: 84 }).map((_, i) => {
+                                                    const day = new Date();
+                                                    day.setDate(day.getDate() - (83 - i)); // Last 84 days
+                                                    const dayStr = day.toISOString().split("T")[0];
+                                                    const isCompleted = habit.recentLogs?.includes(dayStr);
+                                                    return (
+                                                        <Tooltip key={i}>
+                                                            <TooltipTrigger asChild>
+                                                                <div
+                                                                    className={`w-1.5 h-1.5 rounded-sm ${isCompleted ? "bg-green-500" : "bg-muted-foreground/20"}`}
+                                                                />
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                                <p className="text-[10px]">{format(day, "MMM d, yyyy")}</p>
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    )
+                                                })}
+                                            </div>
+                                        </TooltipProvider>
+                                    </CardContent>
+                                </Card>
+                            </SwipeableListItem>
                         ))}
                     </div>
                 </>

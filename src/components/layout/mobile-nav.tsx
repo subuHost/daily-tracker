@@ -1,69 +1,91 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
     LayoutDashboard,
     Wallet,
     CheckSquare,
+    Activity,
+    MoreHorizontal,
+    MessageCircle,
+    StickyNote,
     Target,
+    GraduationCap,
     Calendar,
     BookOpen,
     ShoppingBag,
     Users,
     Image,
     BarChart3,
-    StickyNote,
-    Activity,
-    GraduationCap,
+    X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MoreDrawer } from "./more-drawer";
 
-const navigation = [
+const primaryNavigation = [
     { name: "Home", href: "/dashboard", icon: LayoutDashboard },
-    { name: "Health", href: "/health", icon: Activity },
     { name: "Finance", href: "/finance", icon: Wallet },
+    { name: "Assistant", href: "/chat", icon: MessageCircle },
     { name: "Tasks", href: "/tasks", icon: CheckSquare },
-    { name: "Study", href: "/study", icon: GraduationCap },
-    { name: "Habits", href: "/habits", icon: Target },
-    { name: "Calendar", href: "/calendar", icon: Calendar },
-    { name: "Journal", href: "/journal", icon: BookOpen },
-    { name: "Shopping", href: "/shopping", icon: ShoppingBag },
-    { name: "Contacts", href: "/contacts", icon: Users },
-    { name: "Gallery", href: "/gallery", icon: Image },
-    { name: "Notes", href: "/notepad", icon: StickyNote },
-    { name: "Reports", href: "/reports", icon: BarChart3 },
 ];
 
 export function MobileNav() {
     const pathname = usePathname();
+    const [isMoreOpen, setIsMoreOpen] = useState(false);
 
     return (
-        <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t safe-area-bottom">
-            <nav className="relative h-16">
-                <div className="flex items-center gap-1 h-full px-2 overflow-x-auto scrollbar-hide">
-                    {navigation.map((item) => {
-                        const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-                        return (
-                            <Link
-                                key={item.name}
-                                href={item.href}
-                                className={cn(
-                                    "flex flex-col items-center justify-center gap-0.5 px-2.5 py-1.5 rounded-lg transition-colors flex-shrink-0 min-w-[54px]",
-                                    isActive
-                                        ? "text-primary bg-primary/10"
-                                        : "text-muted-foreground hover:text-foreground"
-                                )}
-                            >
-                                <item.icon className={cn("h-5 w-5", isActive && "stroke-[2.5px]")} />
-                                <span className="text-[9px] font-medium truncate max-w-[50px]">{item.name}</span>
-                            </Link>
-                        );
-                    })}
-                </div>
-                {/* Fade gradient on right side to indicate scroll */}
-                <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-card to-transparent pointer-events-none" />
+        <div className="md:hidden fixed bottom-0 left-0 right-0 z-[60] bg-card/80 backdrop-blur-md border-t safe-area-bottom shadow-lg">
+            <nav className="h-16 flex items-center justify-around px-2 max-w-lg mx-auto">
+                {primaryNavigation.map((item) => {
+                    const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+                    return (
+                        <Link
+                            key={item.href}
+                            href={item.href}
+                            className={cn(
+                                "flex flex-col items-center justify-center gap-1 w-16 h-full transition-all active:scale-90",
+                                isActive
+                                    ? "text-primary scale-110"
+                                    : "text-muted-foreground hover:text-foreground"
+                            )}
+                        >
+                            <div className={cn(
+                                "flex items-center justify-center rounded-full transition-colors",
+                                isActive && "bg-primary/10 p-2"
+                            )}>
+                                <item.icon className={cn("h-6 w-6", isActive && "stroke-[2.5px]")} />
+                            </div>
+                            <span className={cn(
+                                "text-[10px] font-medium transition-all",
+                                isActive ? "opacity-100" : "opacity-70"
+                            )}>
+                                {item.name}
+                            </span>
+                        </Link>
+                    );
+                })}
+
+                {/* More Button */}
+                <button
+                    onClick={() => setIsMoreOpen(true)}
+                    className={cn(
+                        "flex flex-col items-center justify-center gap-1 w-16 h-full transition-all active:scale-90",
+                        isMoreOpen ? "text-primary" : "text-muted-foreground"
+                    )}
+                >
+                    <div className={cn(
+                        "flex items-center justify-center rounded-full transition-colors",
+                        isMoreOpen && "bg-primary/10 p-2"
+                    )}>
+                        <MoreHorizontal className="h-6 w-6" />
+                    </div>
+                    <span className="text-[10px] font-medium">More</span>
+                </button>
             </nav>
+
+            <MoreDrawer isOpen={isMoreOpen} onClose={() => setIsMoreOpen(false)} />
         </div>
     );
 }

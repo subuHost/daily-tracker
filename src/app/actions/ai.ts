@@ -162,13 +162,13 @@ const tools = {
     ]
 };
 
-export async function chatWithAI(history: Message[], userContext?: string) {
+export async function chatWithAI(history: Message[], userContext?: string): Promise<Message> {
     const genAI = getGeminiClient();
 
     if (!genAI) {
         console.error("Gemini API Key missing");
         return {
-            role: "assistant",
+            role: "assistant" as const,
             content: "I'm sorry, but no Gemini API keys are configured. Please add GEMINI_API_KEY to your .env.local file."
         };
     }
@@ -314,7 +314,7 @@ export async function chatWithAI(history: Message[], userContext?: string) {
             }
 
             return {
-                role: "assistant",
+                role: "assistant" as const,
                 content: resultText
             };
         }
@@ -332,14 +332,14 @@ export async function chatWithAI(history: Message[], userContext?: string) {
         }
 
         return {
-            role: "assistant",
+            role: "assistant" as const,
             content: assistantContent
         };
 
     } catch (error: any) {
         console.error("Gemini AI Error:", error);
         return {
-            role: "assistant",
+            role: "assistant" as const,
             content: `Error: ${error.message || "Something went wrong."}`
         };
     }
@@ -726,6 +726,149 @@ export async function generateDailyBriefing(): Promise<{ briefing: string }> {
         console.error("Daily briefing error:", error);
         return { briefing: "Could not generate your briefing right now. Check back later!" };
     }
+}
+
+export async function createChatFolder(name: string, color: string = "#3b82f6") {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const { data, error } = await supabase
+        .from("chat_folders")
+        .insert({ user_id: user.id, name, color })
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function getChatFolders() {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = createClient();
+    const { data, error } = await supabase
+        .from("chat_folders")
+        .select("*")
+        .order("name");
+    if (error) throw error;
+    return data;
+}
+
+export async function createChatSession(folderId?: string, title: string = "New Conversation") {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const { data, error } = await supabase
+        .from("chat_sessions")
+        .insert({ user_id: user.id, folder_id: folderId, title })
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function getChatSessions(folderId?: string) {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = createClient();
+    let query = supabase.from("chat_sessions").select("*").order("updated_at", { ascending: false });
+    if (folderId) query = query.eq("folder_id", folderId);
+    const { data, error } = query;
+    if (error) throw error;
+    return data;
+}
+
+export async function deleteChatSession(sessionId: string) {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = createClient();
+    const { error } = await supabase.from("chat_sessions").delete().eq("id", sessionId);
+    if (error) throw error;
+}
+
+export async function updateChatSessionTitle(sessionId: string, title: string) {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = createClient();
+    const { error } = await supabase
+        .from("chat_sessions")
+        .update({ title, updated_at: new Date().toISOString() })
+        .eq("id", sessionId);
+    if (error) throw error;
+}
+
+export async function getSessionMessages(sessionId: string) {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = createClient();
+    const { data, error } = await supabase
+        .from("chat_session_messages")
+        .select("*")
+        .eq("session_id", sessionId)
+        .order("created_at", { ascending: true });
+    if (error) throw error;
+    return data;
+}
+
+/**
+ * Enhanced chatWithAI that works within a session context.
+ * Injects context, handles tools, and persists messages to chat_session_messages.
+ */
+export async function sendMessageInSession(
+    sessionId: string,
+    content: string,
+    history: Message[]
+): Promise<Message> {
+    // 1. Get AI response using existing logic (with context etc)
+    // We pass the history including the current content
+    const fullHistory = [...history, { role: "user" as const, content }];
+    const context = await getDailyContextAction();
+    const aiResponse = await chatWithAI(fullHistory, context);
+
+    // 2. Persist to session-based tables
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = createClient();
+
+    // Save user message
+    await supabase.from("chat_session_messages").insert({
+        session_id: sessionId,
+        role: "user",
+        content: content
+    });
+
+    // Save AI response
+    await supabase.from("chat_session_messages").insert({
+        session_id: sessionId,
+        role: "assistant",
+        content: aiResponse.content
+    });
+
+    // Update session timestamp
+    await supabase.from("chat_sessions").update({
+        updated_at: new Date().toISOString()
+    }).eq("id", sessionId);
+
+    // If session title is still default, generate one
+    const { data: session } = await supabase
+        .from("chat_sessions")
+        .select("title")
+        .eq("id", sessionId)
+        .single();
+
+    if (session?.title === "New Conversation") {
+        try {
+            const genAI = getGeminiClient();
+            if (genAI) {
+                const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+                const prompt = `Summarize this user request into a short (3-5 words) title: "${content}"`;
+                const result = await model.generateContent(prompt);
+                const newTitle = result.response.text().trim().replace(/["]+/g, '');
+                await updateChatSessionTitle(sessionId, newTitle);
+            }
+        } catch (e) {
+            console.error("Failed to generate session title:", e);
+        }
+    }
+
+    return aiResponse;
 }
 
 // Deterministic fallback briefing when Gemini is unavailable
