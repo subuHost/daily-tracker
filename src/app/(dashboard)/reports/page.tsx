@@ -31,13 +31,14 @@ import {
 } from "recharts";
 import { toast } from "sonner";
 import { getStats, getCategoryBreakdownRange, getHabits, getMoodStats, getInvestments, getMonthlyTrend, getTransactions, getCurrentBudget, getMonthlyBudgets, type MonthlyTrendPoint, type MonthlyBudget } from "@/lib/db";
-import { startOfMonth, endOfMonth, format, subMonths, startOfYear, differenceInDays, getDaysInMonth } from "date-fns";
+import { getCorrelationData, type DailyCorrelationPoint } from "@/lib/db/reports";
+import { startOfMonth, endOfMonth, format, subMonths, startOfYear, differenceInDays, getDaysInMonth, subDays } from "date-fns";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Link as LinkIcon, Info } from "lucide-react";
 
 export default function ReportsPage() {
     const [dateRange, setDateRange] = useState({
-        start: format(startOfMonth(new Date()), "yyyy-MM-dd"),
+        start: format(subDays(new Date(), 30), "yyyy-MM-dd"), // Default to last 30 days for correlation
         end: format(new Date(), "yyyy-MM-dd"),
     });
 
@@ -50,6 +51,48 @@ export default function ReportsPage() {
     const [portfolioValue, setPortfolioValue] = useState(0);
     const [monthlyTrendData, setMonthlyTrendData] = useState<(MonthlyTrendPoint & { budget?: number })[]>([]);
     const [currentBudget, setCurrentBudget] = useState<number | null>(null);
+    const [correlationData, setCorrelationData] = useState<DailyCorrelationPoint[]>([]);
+
+    const calculateInsights = (data: DailyCorrelationPoint[]) => {
+        if (!data || data.length === 0) return null;
+
+        // Sleep vs Mood
+        const goodSleepDays = data.filter(d => d.sleep !== null && d.sleep >= 7 && d.mood !== null);
+        const poorSleepDays = data.filter(d => d.sleep !== null && d.sleep < 7 && d.mood !== null);
+
+        const avgMoodGoodSleep = goodSleepDays.length > 0
+            ? goodSleepDays.reduce((sum, d) => sum + (d.mood || 0), 0) / goodSleepDays.length
+            : null;
+        const avgMoodPoorSleep = poorSleepDays.length > 0
+            ? poorSleepDays.reduce((sum, d) => sum + (d.mood || 0), 0) / poorSleepDays.length
+            : null;
+
+        // Habits vs Mood
+        const fullHabitDays = data.filter(d => d.habitCompletionPct !== null && d.habitCompletionPct >= 100 && d.mood !== null);
+        const incompleteHabitDays = data.filter(d => d.habitCompletionPct !== null && d.habitCompletionPct < 100 && d.mood !== null);
+
+        const avgMoodFullHabits = fullHabitDays.length > 0
+            ? fullHabitDays.reduce((sum, d) => sum + (d.mood || 0), 0) / fullHabitDays.length
+            : null;
+        const avgMoodIncompleteHabits = incompleteHabitDays.length > 0
+            ? incompleteHabitDays.reduce((sum, d) => sum + (d.mood || 0), 0) / incompleteHabitDays.length
+            : null;
+
+        return {
+            sleepMood: avgMoodGoodSleep && avgMoodPoorSleep ? {
+                good: avgMoodGoodSleep,
+                poor: avgMoodPoorSleep,
+                diff: avgMoodGoodSleep - avgMoodPoorSleep
+            } : null,
+            habitMood: avgMoodFullHabits && avgMoodIncompleteHabits ? {
+                full: avgMoodFullHabits,
+                incomplete: avgMoodIncompleteHabits,
+                diff: avgMoodFullHabits - avgMoodIncompleteHabits
+            } : null
+        };
+    };
+
+    const insights = calculateInsights(correlationData);
 
     const loadReportData = async () => {
         setIsLoading(true);
@@ -63,8 +106,7 @@ export default function ReportsPage() {
             const categories = await getCategoryBreakdownRange(dateRange.start, dateRange.end);
             setCategoryBreakdown(categories);
 
-            // Fetch habit data (not date ranged yet, usually lifetime or monthly, maybe we iterate later)
-            // For now, habits are lifetime stats in current implementation
+            // Fetch habit data
             const habits = await getHabits();
             const habitStats = habits.map(h => ({
                 name: h.name,
@@ -76,10 +118,11 @@ export default function ReportsPage() {
             // Fetch Mood Stats for range
             const moodData = await getMoodStats(undefined, undefined, dateRange.start, dateRange.end);
             const moodChartData = Object.entries(moodData.breakdown).map(([rating, count]) => ({
+                rating: Number(rating),
                 name: ["Terrible", "Bad", "Okay", "Good", "Great"][Number(rating) - 1] || "Unknown",
                 value: count,
                 color: ["#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e"][Number(rating) - 1] || "#888888"
-            }));
+            })).sort((a, b) => a.rating - b.rating);
             setMoodStats({ average: moodData.average, breakdown: moodChartData });
 
             // Fetch Portfolio Value (Lifetime)
@@ -102,6 +145,11 @@ export default function ReportsPage() {
             setMonthlyTrendData(combinedData);
             setCurrentBudget(budget ? Number(budget.amount) : null);
 
+            // Fetch Correlation Data
+            const daysDiff = differenceInDays(new Date(dateRange.end), new Date(dateRange.start)) + 1;
+            const corrData = await getCorrelationData(daysDiff);
+            setCorrelationData(corrData);
+
         } catch (error) {
             console.error("Failed to load report data:", error);
             toast.error("Failed to load reports");
@@ -109,6 +157,7 @@ export default function ReportsPage() {
             setIsLoading(false);
         }
     };
+
 
     useEffect(() => {
         loadReportData();
@@ -409,6 +458,148 @@ export default function ReportsPage() {
                             </CardContent>
                         </Card>
                     </div>
+
+                    {/* Wellness Correlation Section */}
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <LinkIcon className="h-5 w-5 text-indigo-500" />
+                                <CardTitle className="text-lg">Wellness Correlation</CardTitle>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
+                                <div className="lg:col-span-2">
+                                    <div className="h-[300px]">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <LineChart data={correlationData}>
+                                                <XAxis
+                                                    dataKey="date"
+                                                    axisLine={false}
+                                                    tickLine={false}
+                                                    fontSize={10}
+                                                    tickFormatter={(str) => format(new Date(str), "MMM d")}
+                                                />
+                                                <YAxis
+                                                    yAxisId="left"
+                                                    axisLine={false}
+                                                    tickLine={false}
+                                                    fontSize={12}
+                                                    domain={[0, 10]}
+                                                    label={{ value: 'Mood/Sleep', angle: -90, position: 'insideLeft', style: { fontSize: 10, fill: '#64748b' } }}
+                                                />
+                                                <YAxis
+                                                    yAxisId="right"
+                                                    orientation="right"
+                                                    axisLine={false}
+                                                    tickLine={false}
+                                                    fontSize={12}
+                                                    domain={[0, 100]}
+                                                    label={{ value: 'Habits %', angle: 90, position: 'insideRight', style: { fontSize: 10, fill: '#64748b' } }}
+                                                />
+                                                <Tooltip
+                                                    contentStyle={{
+                                                        backgroundColor: "hsl(var(--card))",
+                                                        border: "1px solid hsl(var(--border))",
+                                                        borderRadius: "12px",
+                                                        boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
+                                                    }}
+                                                    labelFormatter={(label) => format(new Date(label), "MMMM d, yyyy")}
+                                                />
+                                                <Line
+                                                    yAxisId="left"
+                                                    type="monotone"
+                                                    dataKey="mood"
+                                                    stroke="#eab308"
+                                                    strokeWidth={3}
+                                                    dot={{ r: 4, fill: "#eab308", strokeWidth: 2, stroke: "#fff" }}
+                                                    activeDot={{ r: 6 }}
+                                                    name="Mood (1-5)"
+                                                />
+                                                <Line
+                                                    yAxisId="left"
+                                                    type="monotone"
+                                                    dataKey="sleep"
+                                                    stroke="#6366f1"
+                                                    strokeWidth={2}
+                                                    strokeDasharray="5 5"
+                                                    dot={false}
+                                                    name="Sleep (hrs)"
+                                                />
+                                                <Line
+                                                    yAxisId="right"
+                                                    type="monotone"
+                                                    dataKey="habitCompletionPct"
+                                                    stroke="#22c55e"
+                                                    strokeWidth={2}
+                                                    dot={false}
+                                                    name="Habits (%)"
+                                                />
+                                            </LineChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                    <div className="flex justify-center gap-6 mt-4">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-3 h-3 rounded-full bg-yellow-400" />
+                                            <span className="text-xs text-muted-foreground font-medium">Mood (1–5)</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-3 h-1 border-t-2 border-dashed border-indigo-500" />
+                                            <span className="text-xs text-muted-foreground font-medium">Sleep (hrs)</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-3 h-3 rounded-full bg-green-500" />
+                                            <span className="text-xs text-muted-foreground font-medium">Habits (%)</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <div className="p-4 rounded-xl border bg-muted/30 relative overflow-hidden group">
+                                        <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
+                                            <Info className="h-12 w-12" />
+                                        </div>
+                                        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                                            <span>😴</span> Sleep & Mood
+                                        </h3>
+                                        {insights?.sleepMood ? (
+                                            <div className="space-y-2">
+                                                <p className="text-sm leading-relaxed">
+                                                    On nights with <strong className="text-indigo-600">7+ hours sleep</strong>, your average mood is <strong>{insights.sleepMood.good.toFixed(1)}/5</strong> vs <strong>{insights.sleepMood.poor.toFixed(1)}/5</strong> on shorter nights.
+                                                </p>
+                                                <div className="text-xs font-medium px-2 py-1 rounded bg-green-100 text-green-700 inline-block">
+                                                    +{insights.sleepMood.diff.toFixed(1)} mood boost from good sleep
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <p className="text-xs text-muted-foreground italic">Log more sleep and mood data to see insights.</p>
+                                        )}
+                                    </div>
+
+                                    <div className="p-4 rounded-xl border bg-muted/30 relative overflow-hidden group">
+                                        <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
+                                            <Info className="h-12 w-12" />
+                                        </div>
+                                        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                                            <span>💪</span> Habits & Mood
+                                        </h3>
+                                        {insights?.habitMood ? (
+                                            <div className="space-y-2">
+                                                <p className="text-sm leading-relaxed">
+                                                    Days with <strong className="text-green-600">all habits done</strong> show a <strong>{insights.habitMood.full.toFixed(1)}/5</strong> mood average compared to <strong>{insights.habitMood.incomplete.toFixed(1)}/5</strong> on incomplete days.
+                                                </p>
+                                                <div className={`text-xs font-medium px-2 py-1 rounded inline-block ${insights.habitMood.diff > 0 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                    {insights.habitMood.diff > 0 ? '+' : ''}{insights.habitMood.diff.toFixed(1)} mood difference
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <p className="text-xs text-muted-foreground italic">Complete all your habits to see the impact on your mood.</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
 
                     {/* Monthly Trend Chart */}
                     <Card>
