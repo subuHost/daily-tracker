@@ -13,7 +13,9 @@ import { Stopwatch } from "@/components/study/problem-view/stopwatch";
 import { logAttemptAction } from "@/app/actions";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { ExternalLink, CheckCircle2, XCircle, HelpCircle } from "lucide-react";
+import { generateHint } from "@/app/actions/ai";
+import { motion, AnimatePresence } from "framer-motion";
+import { Sparkles, ChevronDown, ChevronUp, Clock, BarChart3, GraduationCap, XCircle, CheckCircle2, HelpCircle, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +29,9 @@ export default function ProblemReviewPage({ params }: { params: { id: string } }
 
     // UI States
     const [solutionRevealed, setSolutionRevealed] = useState(false);
+    const [hint, setHint] = useState<{ intuition: string; pattern: string; complexityTarget: string } | null>(null);
+    const [hintLoading, setHintLoading] = useState(false);
+    const [showComplexity, setShowComplexity] = useState(false);
 
     const router = useRouter();
     const supabase = createClient();
@@ -59,6 +64,20 @@ export default function ProblemReviewPage({ params }: { params: { id: string } }
             toast.error("Failed to save attempt");
         } finally {
             setSubmitting(false);
+        }
+    }
+
+    async function handleGetHint() {
+        if (!problem) return;
+        setHintLoading(true);
+        try {
+            const h = await generateHint(problem, notes);
+            setHint(h);
+            if (!h) toast.info("Hint unavailable - check the video solution below.");
+        } catch (e) {
+            toast.error("Failed to generate hint");
+        } finally {
+            setHintLoading(false);
         }
     }
 
@@ -122,6 +141,82 @@ export default function ProblemReviewPage({ params }: { params: { id: string } }
                                 Go to Problem Statement &rarr;
                             </Link>
                         )}
+                    </div>
+
+                    {/* AI Hint Panel */}
+                    <div className="bg-card border rounded-lg overflow-hidden my-6">
+                        <div className="bg-muted/50 px-4 py-3 border-b flex justify-between items-center">
+                            <div className="flex items-center gap-2 font-semibold text-sm">
+                                <Sparkles className="h-4 w-4 text-primary" />
+                                AI Study Hint
+                            </div>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 text-xs font-semibold text-primary hover:text-primary/80 hover:bg-primary/5"
+                                onClick={handleGetHint}
+                                disabled={hintLoading}
+                            >
+                                {hintLoading ? "Generating..." : hint ? "Regenerate" : "Get Hint"}
+                            </Button>
+                        </div>
+
+                        <div className="p-4 min-h-[100px] flex flex-col justify-center">
+                            {hintLoading ? (
+                                <div className="space-y-3 animate-pulse">
+                                    <div className="h-3 bg-muted rounded w-1/4" />
+                                    <div className="h-10 bg-muted rounded w-full" />
+                                    <div className="h-3 bg-muted rounded w-1/4 pt-2" />
+                                    <div className="h-8 bg-muted rounded w-3/4" />
+                                </div>
+                            ) : hint ? (
+                                <AnimatePresence mode="wait">
+                                    <motion.div
+                                        key="hint-content"
+                                        initial={{ opacity: 0, y: 5 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -5 }}
+                                        className="space-y-4"
+                                    >
+                                        <div>
+                                            <span className="text-[10px] font-bold uppercase tracking-wider text-primary">Key Intuition</span>
+                                            <p className="text-sm text-foreground leading-relaxed mt-1">{hint.intuition}</p>
+                                        </div>
+                                        <div className="border-t border-dashed pt-3">
+                                            <span className="text-[10px] font-bold uppercase tracking-wider text-primary">Pattern / Tool</span>
+                                            <p className="text-sm text-foreground leading-relaxed mt-1">{hint.pattern}</p>
+                                        </div>
+
+                                        <div className="pt-2">
+                                            <button
+                                                onClick={() => setShowComplexity(!showComplexity)}
+                                                className="text-xs text-muted-foreground flex items-center gap-1 hover:text-foreground transition-colors"
+                                            >
+                                                {showComplexity ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                                                {showComplexity ? "Hide complexity target" : "Show complexity target"}
+                                            </button>
+
+                                            {showComplexity && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, height: 0 }}
+                                                    animate={{ opacity: 1, height: 'auto' }}
+                                                    className="mt-2 p-2 bg-muted/30 rounded text-xs text-center font-mono text-muted-foreground border border-dashed"
+                                                >
+                                                    Target: {hint.complexityTarget}
+                                                </motion.div>
+                                            )}
+                                        </div>
+                                    </motion.div>
+                                </AnimatePresence>
+                            ) : (
+                                <div className="text-center py-4">
+                                    <HelpCircle className="h-8 w-8 text-muted/30 mx-auto mb-2" />
+                                    <p className="text-xs text-muted-foreground max-w-[200px] mx-auto">
+                                        Stuck? AI can give you a nudge in the right direction without spoiling the answer.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
 

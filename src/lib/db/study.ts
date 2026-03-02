@@ -290,3 +290,110 @@ export async function saveSystemDesignCase(input: Partial<SystemDesignCase>, sup
         return data;
     }
 }
+
+// ------ ANALYTICS ------
+
+export async function getStudyActivity(days: number = 365, supabaseClient?: any) {
+    const supabase = supabaseClient || createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const { data, error } = await supabase
+        .from('attempts')
+        .select('timestamp')
+        .eq('user_id', user.id)
+        .gte('timestamp', startDate.toISOString());
+
+    if (error) throw error;
+
+    // Group by date
+    const counts: Record<string, number> = {};
+    (data as Array<{ timestamp: string }>).forEach(d => {
+        const date = d.timestamp.split('T')[0];
+        counts[date] = (counts[date] || 0) + 1;
+    });
+
+    return Object.entries(counts).map(([date, count]) => ({ date, count }));
+}
+
+export async function getStudyStreak(supabaseClient?: any) {
+    const supabase = supabaseClient || createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const { data, error } = await supabase
+        .from('attempts')
+        .select('timestamp')
+        .eq('user_id', user.id)
+        .order('timestamp', { ascending: false });
+
+    if (error) throw error;
+    if (!data || data.length === 0) return 0;
+
+    // Get unique dates only (YYYY-MM-DD)
+    const dates = Array.from(new Set((data as Array<{ timestamp: string }>).map(d => d.timestamp.split('T')[0])));
+
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+
+    // If latest attempt is older than yesterday, streak is broken
+    if (dates[0] !== today && dates[0] !== yesterday) return 0;
+
+    let streak = 0;
+    let checkDate = new Date(dates[0]);
+
+    for (let i = 0; i < dates.length; i++) {
+        const d = new Date(dates[i]);
+        const diffDays = Math.floor((checkDate.getTime() - d.getTime()) / 86400000);
+
+        if (i === 0 || diffDays === 1) {
+            streak++;
+            checkDate = d;
+        } else if (diffDays === 0) {
+            continue;
+        } else {
+            break;
+        }
+    }
+
+    return streak;
+}
+
+export async function getTopicTimeBreakdown(supabaseClient?: any) {
+    const supabase = supabaseClient || createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const { data, error } = await supabase
+        .from('attempts')
+        .select(`
+            time_taken_seconds,
+            problems (
+                topic_category
+            )
+        `)
+        .eq('user_id', user.id)
+        .not('time_taken_seconds', 'is', null);
+
+    if (error) throw error;
+
+    const breakdown: Record<string, { totalMinutes: number, attemptCount: number }> = {};
+
+    (data as any[]).forEach(item => {
+        const topic = item.problems?.topic_category || 'Uncategorized';
+        if (!breakdown[topic]) {
+            breakdown[topic] = { totalMinutes: 0, attemptCount: 0 };
+        }
+        breakdown[topic].totalMinutes += (item.time_taken_seconds || 0) / 60;
+        breakdown[topic].attemptCount += 1;
+    });
+
+    return Object.entries(breakdown).map(([topic, stats]) => ({
+        topic,
+        totalMinutes: Math.round(stats.totalMinutes),
+        attemptCount: stats.attemptCount
+    }));
+}

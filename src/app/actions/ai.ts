@@ -850,3 +850,46 @@ export async function suggestCategory(description: string): Promise<string | nul
         return null;
     }
 }
+
+/**
+ * Generates a structured hint for a study problem using Gemini.
+ */
+export async function generateHint(problem: any, userNotes?: string): Promise<{ intuition: string; pattern: string; complexityTarget: string } | null> {
+    const genAI = getGeminiClient();
+    if (!genAI) return null;
+
+    try {
+        const model = genAI.getGenerativeModel({
+            model: "gemini-flash-latest",
+        });
+
+        const prompt = `You are a technical interview coach. Provide a structured hint for the following problem without revealing the full solution.
+
+Problem: ${problem.title}
+Difficulty: ${problem.difficulty || problem.difficulty_official}
+Topic: ${problem.topic_category}
+Tags/Patterns: ${problem.tags_pattern?.join(', ') || 'None'}
+User's Notes: ${userNotes || 'None'}
+
+Your response must be in this exact JSON format:
+{
+  "intuition": "A one-sentence clue about the approach direction.",
+  "pattern": "The data structure or algorithmic pattern to consider.",
+  "complexityTarget": "The time and space complexity to aim for (e.g., O(n) time, O(1) space)."
+}
+
+Constraint: Do not provide code examples or the final solution text.`;
+
+        const result = await model.generateContent(prompt);
+        const response = result.response.text();
+
+        const jsonMatch = response.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            return JSON.parse(jsonMatch[0]);
+        }
+        return null;
+    } catch (error) {
+        console.error("AI Hint Generation Error:", error);
+        return null;
+    }
+}
