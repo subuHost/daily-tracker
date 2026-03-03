@@ -2,8 +2,10 @@
 // Supabase Edge Function: push-dispatcher
 // Handles sending Web Push notifications to user devices
 
-import { createClient } from "supabase";
-import webpush from "webpush";
+// @ts-ignore
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
+// @ts-ignore
+import webpush from "https://esm.sh/web-push@3.6.6?target=deno";
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
