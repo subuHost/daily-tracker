@@ -4,6 +4,8 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 
+import { PushRegistration } from "@/components/layout/push-registration";
+
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
@@ -35,6 +37,7 @@ export default function RootLayout({
                 >
                     {children}
                     <Toaster />
+                    <PushRegistration />
                 </ThemeProvider>
             </body>
         </html>

@@ -20,6 +20,7 @@ import {
     Image,
     BarChart3,
     X,
+    Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MoreDrawer } from "./more-drawer";
@@ -29,6 +30,7 @@ const primaryNavigation = [
     { name: "Finance", href: "/finance", icon: Wallet },
     { name: "Assistant", href: "/chat", icon: MessageCircle },
     { name: "Tasks", href: "/tasks", icon: CheckSquare },
+    { name: "Alerts", href: "/notifications", icon: Bell },
 ];
 
 export function MobileNav() {

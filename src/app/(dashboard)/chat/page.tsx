@@ -34,6 +34,8 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 
+import { ModelSelector } from "@/components/chat/model-selector";
+
 export default function ChatPage() {
     const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -41,6 +43,7 @@ export default function ChatPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [isInitialLoading, setIsInitialLoading] = useState(true);
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [selectedModel, setSelectedModel] = useState<'flash' | 'pro'>('flash');
 
     const haptic = useHaptic();
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -52,6 +55,9 @@ export default function ChatPage() {
                 const latestSessions = await getChatSessions();
                 if (latestSessions && latestSessions.length > 0) {
                     setActiveSessionId(latestSessions[0].id);
+                    if (latestSessions[0].model) {
+                        setSelectedModel(latestSessions[0].model as 'flash' | 'pro');
+                    }
                 }
             } catch (e) {
                 console.error("Init failed:", e);
@@ -73,6 +79,13 @@ export default function ChatPage() {
             if (!activeSessionId) return;
             setIsLoading(true);
             try {
+                // Update model state from session list
+                const latestSessions = await getChatSessions();
+                const session = latestSessions.find((s: any) => s.id === activeSessionId);
+                if (session?.model) {
+                    setSelectedModel(session.model as 'flash' | 'pro');
+                }
+
                 const fetched = await getSessionMessages(activeSessionId);
                 setMessages(fetched.map(m => ({
                     id: m.id,
@@ -102,6 +115,7 @@ export default function ChatPage() {
         try {
             const session = await createChatSession();
             setActiveSessionId(session.id);
+            setSelectedModel('flash'); // Default for new chats
             setMessages([]);
             setSidebarOpen(false);
             haptic.triggerImpact();
@@ -201,10 +215,16 @@ export default function ChatPage() {
                         </div>
                     </div>
 
-                    <div className="hidden sm:flex items-center gap-2">
+                    <div className="hidden sm:flex items-center gap-3">
+                        <ModelSelector
+                            sessionId={activeSessionId}
+                            currentModel={selectedModel}
+                            onModelChange={setSelectedModel}
+                        />
+                        <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
                         <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleNewChat}>
                             <Plus className="h-3.5 w-3.5" />
-                            New
+                            New Chat
                         </Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
                             <History className="h-4 w-4 text-slate-400" />

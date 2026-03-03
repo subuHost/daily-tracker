@@ -28,6 +28,8 @@ export async function middleware(req: NextRequest) {
         "/gallery",
         "/reports",
         "/settings",
+        "/notifications",
+        "/chat",
     ];
 
     const isProtectedRoute = protectedRoutes.some((route) =>
@@ -38,13 +40,8 @@ export async function middleware(req: NextRequest) {
         return NextResponse.redirect(new URL("/auth/login", req.url));
     }
 
-    // Redirect root to dashboard or login
-    if (req.nextUrl.pathname === "/") {
-        if (session) {
-            return NextResponse.redirect(new URL("/dashboard", req.url));
-        }
-        return NextResponse.redirect(new URL("/auth/login", req.url));
-    }
+    // Root (/) is now allowed (Landing Page)
+    // Protected routes logic above handles other paths
 
     return res;
 }

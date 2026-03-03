@@ -162,7 +162,7 @@ const tools = {
     ]
 };
 
-export async function chatWithAI(history: Message[], userContext?: string): Promise<Message> {
+export async function chatWithAI(history: Message[], userContext?: string, model: 'flash' | 'pro' = 'flash'): Promise<Message> {
     const genAI = getGeminiClient();
 
     if (!genAI) {
@@ -174,8 +174,9 @@ export async function chatWithAI(history: Message[], userContext?: string): Prom
     }
 
     try {
-        const model = genAI.getGenerativeModel({
-            model: "gemini-flash-latest",
+        const resolvedModel = model === 'pro' ? 'gemini-1.5-pro-latest' : 'gemini-flash-latest';
+        const modelInstance = genAI.getGenerativeModel({
+            model: resolvedModel,
             tools: [tools as any],
         });
 
@@ -215,7 +216,7 @@ export async function chatWithAI(history: Message[], userContext?: string): Prom
             chatHistory = [...chatHistory, ...mappedHistory];
         }
 
-        const chat = model.startChat({
+        const chat = modelInstance.startChat({
             history: chatHistory,
         });
 
@@ -796,6 +797,57 @@ export async function updateChatSessionTitle(sessionId: string, title: string) {
     if (error) throw error;
 }
 
+export async function updateSessionModel(sessionId: string, model: 'flash' | 'pro') {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const { error } = await supabase
+        .from("chat_sessions")
+        .update({ model, updated_at: new Date().toISOString() })
+        .eq("id", sessionId)
+        .eq("user_id", user.id);
+    if (error) throw error;
+}
+
+export async function togglePinSession(sessionId: string) {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    // Get current pin status
+    const { data: session } = await supabase
+        .from("chat_sessions")
+        .select("is_pinned")
+        .eq("id", sessionId)
+        .single();
+
+    if (!session) throw new Error("Session not found");
+
+    const { error } = await supabase
+        .from("chat_sessions")
+        .update({ is_pinned: !session.is_pinned, updated_at: new Date().toISOString() })
+        .eq("id", sessionId)
+        .eq("user_id", user.id);
+    if (error) throw error;
+}
+
+export async function moveSessionToFolder(sessionId: string, folderId: string | null) {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const { error } = await supabase
+        .from("chat_sessions")
+        .update({ folder_id: folderId, updated_at: new Date().toISOString() })
+        .eq("id", sessionId)
+        .eq("user_id", user.id);
+    if (error) throw error;
+}
+
 export async function getSessionMessages(sessionId: string) {
     const { createClient } = await import("@/lib/supabase/server");
     const supabase = createClient();
@@ -817,15 +869,23 @@ export async function sendMessageInSession(
     content: string,
     history: Message[]
 ): Promise<Message> {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = createClient();
+
+    // Fetch session model
+    const { data: sessionRow } = await supabase
+        .from("chat_sessions")
+        .select("model")
+        .eq("id", sessionId)
+        .single();
+
+    const sessionModel = (sessionRow?.model as 'flash' | 'pro') || 'flash';
+
     // 1. Get AI response using existing logic (with context etc)
     // We pass the history including the current content
     const fullHistory = [...history, { role: "user" as const, content }];
     const context = await getDailyContextAction();
-    const aiResponse = await chatWithAI(fullHistory, context);
-
-    // 2. Persist to session-based tables
-    const { createClient } = await import("@/lib/supabase/server");
-    const supabase = createClient();
+    const aiResponse = await chatWithAI(fullHistory, context, sessionModel);
 
     // Save user message
     await supabase.from("chat_session_messages").insert({

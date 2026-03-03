@@ -14,7 +14,8 @@ import {
     ChevronDown,
     ChevronRight,
     Search,
-    Loader2
+    Loader2,
+    Pin
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,9 @@ import {
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
+    DropdownMenuSub,
+    DropdownMenuSubTrigger,
+    DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import {
@@ -31,7 +35,9 @@ import {
     createChatFolder,
     createChatSession,
     deleteChatSession,
-    updateChatSessionTitle
+    updateChatSessionTitle,
+    togglePinSession,
+    moveSessionToFolder
 } from "@/app/actions/ai";
 import { toast } from "sonner";
 
@@ -47,6 +53,8 @@ interface ChatSession {
     id: string;
     title: string;
     folder_id: string | null;
+    is_pinned: boolean;
+    model?: string;
     user_id?: string;
     created_at?: string;
     updated_at?: string;
@@ -140,16 +148,38 @@ export function ChatSidebar({ activeSessionId, onSessionSelect, onNewChat }: Cha
         }
     };
 
+    const handleTogglePin = async (id: string) => {
+        try {
+            await togglePinSession(id);
+            setSessions(sessions.map(s => s.id === id ? { ...s, is_pinned: !s.is_pinned } : s));
+            toast.success("Updated pin status");
+        } catch (error) {
+            toast.error("Failed to toggle pin");
+        }
+    };
+
+    const handleMoveToFolder = async (id: string, folderId: string | null) => {
+        try {
+            await moveSessionToFolder(id, folderId);
+            setSessions(sessions.map(s => s.id === id ? { ...s, folder_id: folderId } : s));
+            toast.success(folderId ? "Moved to folder" : "Removed from folder");
+        } catch (error) {
+            toast.error("Failed to move session");
+        }
+    };
+
     const filteredSessions = sessions.filter(s =>
-        s.title.toLowerCase().includes(searchQuery.toLowerCase())
+        s?.title?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     const sessionsInFolders = folders.reduce((acc, folder) => {
-        acc[folder.id] = filteredSessions.filter(s => s.folder_id === folder.id);
+        const folderSessions = filteredSessions.filter(s => s.folder_id === folder.id);
+        acc[folder.id] = [...folderSessions].sort((a, b) => Number(b.is_pinned) - Number(a.is_pinned));
         return acc;
     }, {} as Record<string, ChatSession[]>);
 
     const straySessions = filteredSessions.filter(s => !s.folder_id);
+    const sortedStraySessions = [...straySessions].sort((a, b) => Number(b.is_pinned) - Number(a.is_pinned));
 
     return (
         <div className="flex flex-col h-full w-full bg-slate-50 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800">
@@ -246,6 +276,9 @@ export function ChatSidebar({ activeSessionId, onSessionSelect, onNewChat }: Cha
                                                     onEditChange={setEditSessionTitle}
                                                     onEditSave={handleSaveRename}
                                                     onEditCancel={() => setEditingSessionId(null)}
+                                                    onPin={handleTogglePin}
+                                                    onMoveToFolder={handleMoveToFolder}
+                                                    folders={folders}
                                                 />
                                             ))}
                                         </div>
@@ -257,7 +290,7 @@ export function ChatSidebar({ activeSessionId, onSessionSelect, onNewChat }: Cha
                         {/* Recent Chats (Unfolded) */}
                         <div className="space-y-1">
                             <span className="px-2 mb-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">Recent Chats</span>
-                            {straySessions.map(session => (
+                            {sortedStraySessions.map(session => (
                                 <SessionItem
                                     key={session.id}
                                     session={session}
@@ -270,9 +303,12 @@ export function ChatSidebar({ activeSessionId, onSessionSelect, onNewChat }: Cha
                                     onEditChange={setEditSessionTitle}
                                     onEditSave={handleSaveRename}
                                     onEditCancel={() => setEditingSessionId(null)}
+                                    onPin={handleTogglePin}
+                                    onMoveToFolder={handleMoveToFolder}
+                                    folders={folders}
                                 />
                             ))}
-                            {straySessions.length === 0 && !isLoading && (
+                            {sortedStraySessions.length === 0 && !isLoading && (
                                 <div className="text-[10px] text-slate-400 text-center py-4 italic">No chats found.</div>
                             )}
                         </div>
@@ -300,6 +336,9 @@ interface SessionItemProps {
     onEditChange: (title: string) => void;
     onEditSave: () => void;
     onEditCancel: () => void;
+    onPin: (id: string) => void;
+    onMoveToFolder: (id: string, folderId: string | null) => void;
+    folders: ChatFolder[];
 }
 
 function SessionItem({
@@ -312,7 +351,10 @@ function SessionItem({
     editTitle,
     onEditChange,
     onEditSave,
-    onEditCancel
+    onEditCancel,
+    onPin,
+    onMoveToFolder,
+    folders
 }: SessionItemProps) {
     if (isEditing) {
         return (
@@ -344,7 +386,14 @@ function SessionItem({
             )}
             onClick={() => onSelect(session.id)}
         >
-            <MessageSquare className={cn("h-3.5 w-3.5 shrink-0", isActive ? "text-blue-600" : "text-slate-400")} />
+            <div className="relative">
+                <MessageSquare className={cn("h-3.5 w-3.5 shrink-0", isActive ? "text-blue-600" : "text-slate-400")} />
+                {session.is_pinned && (
+                    <div className="absolute -top-1.5 -right-1.5 bg-blue-500 rounded-full p-0.5 shadow-sm border border-white dark:border-slate-800">
+                        <Pin className="h-2 w-2 text-white fill-white" />
+                    </div>
+                )}
+            </div>
             <span className="flex-1 truncate">{session.title}</span>
 
             <div className="opacity-0 group-hover:opacity-100 flex items-center">
@@ -359,6 +408,40 @@ function SessionItem({
                             <Edit2 className="h-3 w-3 mr-2" />
                             Rename
                         </DropdownMenuItem>
+
+                        <DropdownMenuItem onClick={() => onPin(session.id)}>
+                            <Pin className={cn("h-3 w-3 mr-2", session.is_pinned && "fill-current")} />
+                            {session.is_pinned ? "Unpin" : "Pin"}
+                        </DropdownMenuItem>
+
+                        <DropdownMenuSub>
+                            <DropdownMenuSubTrigger>
+                                <Folder className="h-3 w-3 mr-2" />
+                                <span>Move to...</span>
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent className="text-xs">
+                                {folders.map(f => (
+                                    <DropdownMenuItem
+                                        key={f.id}
+                                        onClick={() => onMoveToFolder(session.id, f.id)}
+                                        disabled={session.folder_id === f.id}
+                                    >
+                                        <div className="w-2 h-2 rounded-full mr-2" style={{ backgroundColor: f.color }} />
+                                        {f.name}
+                                    </DropdownMenuItem>
+                                ))}
+                                {session.folder_id && (
+                                    <>
+                                        <div className="h-px bg-slate-100 dark:bg-slate-800 my-1" />
+                                        <DropdownMenuItem onClick={() => onMoveToFolder(session.id, null)}>
+                                            <X className="h-3 w-3 mr-2" />
+                                            Remove from folder
+                                        </DropdownMenuItem>
+                                    </>
+                                )}
+                            </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+
                         <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onDelete(session.id)}>
                             <Trash2 className="h-3 w-3 mr-2" />
                             Delete
