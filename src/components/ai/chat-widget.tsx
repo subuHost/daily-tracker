@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { MessageCircle, X, Send, Sparkles, User, Bot, Loader2, Camera, Trash2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import {
     chatWithAI,
@@ -225,144 +226,170 @@ export function ChatWidget() {
             {!isOpen && (
                 <Button
                     onClick={() => setIsOpen(true)}
-                    className="fixed bottom-20 left-4 z-50 h-12 w-12 rounded-full shadow-lg p-0 bg-blue-600 hover:bg-blue-700"
+                    className="fixed bottom-[calc(10rem+env(safe-area-inset-bottom))] right-4 z-[50] h-12 w-12 rounded-full shadow-lg p-0 bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all md:bottom-24 md:right-8"
                 >
                     <MessageCircle className="h-6 w-6 text-white" />
+                    <Sparkles className="absolute -top-1 -right-1 h-4 w-4 text-yellow-400 animate-pulse" />
                 </Button>
             )}
 
             {/* Chat Window */}
-            <div
-                className={cn(
-                    "fixed bottom-20 left-4 z-[70] w-[90vw] md:w-96 transition-all duration-300 ease-in-out origin-bottom-left",
-                    isOpen ? "scale-100 opacity-100" : "scale-0 opacity-0 pointer-events-none"
-                )}
-            >
-                <Card className="h-[500px] flex flex-col shadow-2xl border-blue-500/20">
-                    <CardHeader className="p-4 border-b bg-blue-600 text-white rounded-t-lg flex flex-row items-center justify-between space-y-0">
-                        <div className="flex items-center gap-2">
-                            <Sparkles className="h-5 w-5" />
-                            <CardTitle className="text-base">AI Assistant</CardTitle>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-white hover:bg-white/20"
-                                onClick={handleClearHistory}
-                                title="Clear chat history"
-                            >
-                                <Trash2 className="h-4 w-4" />
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-white hover:bg-white/20"
-                                onClick={() => setIsOpen(false)}
-                            >
-                                <X className="h-5 w-5" />
-                            </Button>
-                        </div>
-                    </CardHeader>
+            <AnimatePresence>
+                {isOpen && (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                        className={cn(
+                            "fixed z-[70] transition-all duration-300 ease-in-out",
+                            "w-full h-[100dvh] inset-0 md:inset-auto md:h-[600px] md:w-[400px] md:bottom-24 md:right-8"
+                        )}
+                    >
+                        <Card className={cn(
+                            "h-full flex flex-col shadow-2xl border-blue-500/20 md:rounded-2xl overflow-hidden",
+                            "rounded-none border-0"
+                        )}>
+                            <CardHeader className="p-4 border-b bg-blue-600 text-white flex flex-row items-center justify-between space-y-0 shrink-0 h-16 safe-area-top">
+                                <div className="flex items-center gap-2">
+                                    <Sparkles className="h-5 w-5" />
+                                    <CardTitle className="text-base">AI Assistant</CardTitle>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-white hover:bg-white/20"
+                                        onClick={handleClearHistory}
+                                        title="Clear chat history"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-white hover:bg-white/20"
+                                        onClick={() => setIsOpen(false)}
+                                    >
+                                        <X className="h-5 w-5" />
+                                    </Button>
+                                </div>
+                            </CardHeader>
 
-                    <CardContent ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
-                        {isLoadingHistory ? (
-                            <div className="flex items-center justify-center h-full text-muted-foreground text-sm gap-2">
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                Loading history…
-                            </div>
-                        ) : (
-                            messages.map((m, i) => (
-                                <div
-                                    key={i}
-                                    className={cn(
-                                        "flex items-start gap-2.5",
-                                        m.role === "user" ? "flex-row-reverse" : "flex-row"
-                                    )}
-                                >
-                                    <div
-                                        className={cn(
-                                            "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
-                                            m.role === "user" ? "bg-muted" : "bg-blue-100 text-blue-600"
-                                        )}
-                                    >
-                                        {m.role === "user" ? (
-                                            <User className="h-4 w-4" />
-                                        ) : (
-                                            <Bot className="h-4 w-4" />
-                                        )}
+                            <CardContent ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-background">
+                                {isLoadingHistory ? (
+                                    <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm gap-3">
+                                        <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                                        <p>Refreshing memory…</p>
                                     </div>
-                                    <div
-                                        className={cn(
-                                            "rounded-lg max-w-[80%] text-sm overflow-hidden",
-                                            m.role === "user"
-                                                ? "bg-primary text-primary-foreground"
-                                                : "bg-muted text-muted-foreground"
-                                        )}
-                                    >
-                                        {/* Image preview if present */}
-                                        {m.imagePreview && (
-                                            <div className="relative">
-                                                <img
-                                                    src={m.imagePreview}
-                                                    alt="Food"
-                                                    className="w-full h-32 object-cover"
-                                                />
+                                ) : (
+                                    <div className="flex flex-col gap-4">
+                                        {messages.map((m, i) => (
+                                            <motion.div
+                                                initial={{ opacity: 0, y: 10 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                key={i}
+                                                className={cn(
+                                                    "flex items-start gap-2.5",
+                                                    m.role === "user" ? "flex-row-reverse" : "flex-row"
+                                                )}
+                                            >
+                                                <div
+                                                    className={cn(
+                                                        "w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-sm",
+                                                        m.role === "user" ? "bg-muted" : "bg-blue-600 text-white"
+                                                    )}
+                                                >
+                                                    {m.role === "user" ? (
+                                                        <User className="h-4 w-4" />
+                                                    ) : (
+                                                        <Bot className="h-4 w-4" />
+                                                    )}
+                                                </div>
+                                                <div
+                                                    className={cn(
+                                                        "rounded-2xl max-w-[85%] text-sm overflow-hidden shadow-sm",
+                                                        m.role === "user"
+                                                            ? "bg-blue-600 text-white rounded-tr-none"
+                                                            : "bg-muted text-foreground rounded-tl-none border"
+                                                    )}
+                                                >
+                                                    {/* Image preview if present */}
+                                                    {m.imagePreview && (
+                                                        <div className="relative">
+                                                            <img
+                                                                src={m.imagePreview}
+                                                                alt="Food"
+                                                                className="w-full h-48 object-cover"
+                                                                onLoad={() => {
+                                                                    if (scrollRef.current) {
+                                                                        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+                                                                    }
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    )}
+                                                    <div className="px-4 py-2.5 whitespace-pre-wrap leading-relaxed">{m.content}</div>
+                                                </div>
+                                            </motion.div>
+                                        ))}
+                                        {isLoading && (
+                                            <div className="flex items-center gap-2 text-muted-foreground text-sm pl-10">
+                                                <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                                                Thinking...
                                             </div>
                                         )}
-                                        <div className="px-3 py-2 whitespace-pre-wrap">{m.content}</div>
                                     </div>
-                                </div>
-                            ))
-                        )}
-                        {isLoading && (
-                            <div className="flex items-center gap-2 text-muted-foreground text-sm pl-10">
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                Thinking...
-                            </div>
-                        )}
-                    </CardContent>
+                                )}
+                            </CardContent>
 
-                    <CardFooter className="p-3 border-t">
-                        <form onSubmit={handleSubmit} className="flex w-full gap-2">
-                            {/* Hidden file input */}
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept="image/*"
-                                capture="environment"
-                                className="hidden"
-                                onChange={handleImageUpload}
-                                disabled={isLoading}
-                            />
+                            <CardFooter className="p-4 border-t bg-card h-auto safe-area-bottom">
+                                <form onSubmit={handleSubmit} className="flex w-full gap-2 items-end">
+                                    {/* Hidden file input */}
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        capture="environment"
+                                        className="hidden"
+                                        onChange={handleImageUpload}
+                                        disabled={isLoading}
+                                    />
 
-                            {/* Camera/Image button */}
-                            <Button
-                                type="button"
-                                size="icon"
-                                variant="outline"
-                                disabled={isLoading}
-                                onClick={() => fileInputRef.current?.click()}
-                                className="shrink-0"
-                                title="Snap food photo"
-                            >
-                                <Camera className="h-4 w-4" />
-                            </Button>
+                                    <Button
+                                        type="button"
+                                        size="icon"
+                                        variant="outline"
+                                        disabled={isLoading}
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="shrink-0 rounded-xl h-10 w-10 border-blue-500/20 hover:bg-blue-50 text-blue-600"
+                                        title="Snap photo"
+                                    >
+                                        <Camera className="h-5 w-5" />
+                                    </Button>
 
-                            <Input
-                                placeholder="Log food, add task, or ask anything..."
-                                value={input}
-                                onChange={(e) => setInput(e.target.value)}
-                                className="flex-1"
-                                disabled={isLoading}
-                            />
-                            <Button type="submit" size="icon" disabled={isLoading || !input.trim()}>
-                                <Send className="h-4 w-4" />
-                            </Button>
-                        </form>
-                    </CardFooter>
-                </Card>
-            </div>
+                                    <div className="flex-1 relative flex items-center">
+                                        <Input
+                                            placeholder="Ask anything..."
+                                            value={input}
+                                            onChange={(e) => setInput(e.target.value)}
+                                            className="pr-10 py-5 rounded-xl border-blue-500/20 focus-visible:ring-blue-600"
+                                            disabled={isLoading}
+                                        />
+                                        <Button
+                                            type="submit"
+                                            size="icon"
+                                            disabled={isLoading || !input.trim()}
+                                            className="absolute right-1 h-8 w-8 rounded-lg bg-blue-600 text-white"
+                                        >
+                                            <Send className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </form>
+                            </CardFooter>
+                        </Card>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </>
     );
 }

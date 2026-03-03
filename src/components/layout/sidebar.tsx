@@ -18,6 +18,8 @@ import {
     StickyNote,
     Activity,
     GraduationCap,
+    MessageCircle,
+    Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -35,11 +37,13 @@ const navigation = [
     { name: "Journal", href: "/journal", icon: BookOpen },
     { name: "Habits", href: "/habits", icon: Target },
     { name: "Calendar", href: "/calendar", icon: Calendar },
+    { name: "Assistant", href: "/chat", icon: MessageCircle },
     { name: "Contacts", href: "/contacts", icon: Users },
     { name: "Gallery", href: "/gallery", icon: Image },
     { name: "Notepad", href: "/notepad", icon: StickyNote },
     { name: "Study", href: "/study", icon: GraduationCap },
     { name: "Reports", href: "/reports", icon: BarChart3 },
+    { name: "Notifications", href: "/notifications", icon: Bell },
 ];
 
 export function Sidebar() {

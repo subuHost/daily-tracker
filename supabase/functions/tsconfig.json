@@ -1,0 +1,22 @@
+{
+    "compilerOptions": {
+        "target": "esnext",
+        "module": "esnext",
+        "lib": [
+            "esnext"
+        ],
+        "skipLibCheck": true,
+        "baseUrl": ".",
+        "paths": {
+            "supabase": [
+                "./import_map.json"
+            ],
+            "webpush": [
+                "./import_map.json"
+            ]
+        }
+    },
+    "include": [
+        "**/*.ts"
+    ]
+}
