@@ -35,7 +35,8 @@ import { isInWatchlist, addToWatchlist, removeFromWatchlist } from "@/lib/db/wat
 export default function StockDetailPage({ params }: { params: { symbol: string } }) {
     const router = useRouter();
     const symbol = decodeURIComponent(params.symbol).toUpperCase();
-    const cleanSymbol = symbol.replace(/\.(NS|BO)$/i, ""); // Ensure Finnhub compatible format
+    const displaySymbol = symbol.replace(/\.(NS|BO)$/i, "");
+
 
     const [quote, setQuote] = useState<StockQuote | null>(null);
     const [profile, setProfile] = useState<CompanyProfile | null>(null);
@@ -51,19 +52,21 @@ export default function StockDetailPage({ params }: { params: { symbol: string }
     useEffect(() => {
         loadData();
         checkWatchlist();
-    }, [cleanSymbol]);
+    }, [symbol]);
 
     useEffect(() => {
         loadChartData();
-    }, [cleanSymbol, timeframe]);
+    }, [symbol, timeframe]);
+
 
     const loadData = async () => {
         try {
             const [q, p, models] = await Promise.all([
-                getStockQuote(cleanSymbol),
-                getCompanyProfile(cleanSymbol),
+                getStockQuote(symbol),
+                getCompanyProfile(symbol),
                 getAvailableModelsAction()
             ]);
+
             setQuote(q);
             setProfile(p);
             setAvailableModels(models);
@@ -87,17 +90,19 @@ export default function StockDetailPage({ params }: { params: { symbol: string }
             };
             const from = now - daysMap[timeframe] * 24 * 60 * 60;
             const res = timeframe === "1W" || timeframe === "1M" ? "60" : "D"; // Use intraday for short
-            const c = await getStockCandles(cleanSymbol, res, from, now);
+            const c = await getStockCandles(symbol, res, from, now);
             setCandles(c);
+
         } catch (error) {
             console.error("Failed to load chart:", error);
         }
     };
 
     const checkWatchlist = async () => {
-        const watched = await isInWatchlist(cleanSymbol);
+        const watched = await isInWatchlist(symbol);
         setIsWatched(watched);
     };
+
 
     const toggleWatchlist = async () => {
         try {
@@ -107,8 +112,9 @@ export default function StockDetailPage({ params }: { params: { symbol: string }
                 // For simplicity here, we assume user manages removals from watchlist page if we don't have ID.
                 toast.error("Remove from the Watchlist page");
             } else {
-                await addToWatchlist({ symbol: cleanSymbol, name: profile?.name || undefined });
+                await addToWatchlist({ symbol, name: profile?.name || undefined });
                 setIsWatched(true);
+
                 toast.success("Added to watchlist");
             }
         } catch (error) {
@@ -155,8 +161,9 @@ export default function StockDetailPage({ params }: { params: { symbol: string }
                     <div>
                         <div className="flex items-center gap-2">
                             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-                                {cleanSymbol}
+                                {displaySymbol}
                             </h1>
+
                             <Button
                                 variant="ghost"
                                 size="icon"
@@ -207,8 +214,9 @@ export default function StockDetailPage({ params }: { params: { symbol: string }
                             ({quote.changePercent?.toFixed(2)}%)
                         </span>
                     </div>
-                    <p className="text-[10px] text-muted-foreground mt-1">Live from Finnhub</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">Live price</p>
                 </div>
+
             </div>
 
             <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
@@ -240,13 +248,14 @@ export default function StockDetailPage({ params }: { params: { symbol: string }
                                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                                 </div>
                             ) : (
-                                <PriceChart candles={candles} symbol={cleanSymbol} />
+                                <PriceChart candles={candles} symbol={displaySymbol} />
                             )}
                         </CardContent>
                     </Card>
 
                     {/* AI Research Agent */}
-                    <ResearchPanel symbol={cleanSymbol} companyName={profile?.name} availableModels={availableModels} />
+                    <ResearchPanel symbol={symbol} companyName={profile?.name} availableModels={availableModels} />
+
                 </div>
 
                 {/* Sidebar: Stats + Profile */}

@@ -1,12 +1,115 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/client";
-import { getUserAiSettings } from "@/lib/db/user-settings";
+import { getUserAiSettingsServer } from "@/lib/db/user-settings.server";
 import { getGeminiClient, getCurrentKey, markKeyFailed } from "@/lib/ai/gemini-client";
 import { createOpenAIClient, openaiChat } from "@/lib/ai/openai-client";
 import { createPerplexityClient, perplexitySearch } from "@/lib/ai/perplexity-client";
 
+// ─── Exchange Detection Helpers ─────────────────────────────────
+
+const KNOWN_NSE_SYMBOLS = new Set([
+    'RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'HINDUNILVR', 'BHARTIARTL', 'ITC',
+    'KOTAKBANK', 'LT', 'AXISBANK', 'SBIN', 'ASIANPAINT', 'BAJFINANCE', 'MARUTI', 'HCLTECH'
+]);
+
+function detectExchange(symbol: string): 'NSE' | 'BSE' | 'US' {
+    const s = symbol.toUpperCase();
+    if (s.endsWith('.NS')) return 'NSE';
+    if (s.endsWith('.BO')) return 'BSE';
+    if (KNOWN_NSE_SYMBOLS.has(s)) return 'NSE';
+    return 'US';
+}
+
+function ensureExchangeSuffix(symbol: string, exchange: 'NSE' | 'BSE'): string {
+    const s = symbol.toUpperCase();
+    if (s.endsWith('.NS') || s.endsWith('.BO')) return symbol;
+    return exchange === 'NSE' ? `${symbol}.NS` : `${symbol}.BO`;
+}
+
+// ─── Yahoo Finance API ──────────────────────────────────────────
+
+/**
+ * Fetch a quote from Yahoo Finance (for Indian stocks).
+ */
+async function fetchYahooQuote(yahooSymbol: string, originalSymbol: string): Promise<StockQuote | null> {
+    try {
+        const res = await fetch(
+            `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}`,
+            {
+                next: { revalidate: 30 },
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+            }
+        );
+
+        if (!res.ok) return null;
+
+        const data = await res.json();
+        const result = data.chart?.result?.[0];
+        if (!result || !result.meta) return null;
+
+        const meta = result.meta;
+        const current = meta.regularMarketPrice;
+        const previousClose = meta.chartPreviousClose || meta.previousClose;
+
+        return {
+            symbol: originalSymbol,
+            current,
+            high: meta.regularMarketDayHigh,
+            low: meta.regularMarketDayLow,
+            open: meta.regularMarketOpen,
+            previousClose,
+            change: current - previousClose,
+            changePercent: ((current - previousClose) / previousClose) * 100,
+            timestamp: meta.regularMarketTime,
+        };
+    } catch (error) {
+        console.error(`Yahoo quote error for ${yahooSymbol}:`, error);
+        return null;
+    }
+}
+
+/**
+ * Fetch candles from Yahoo Finance.
+ */
+async function fetchYahooCandles(yahooSymbol: string, from: number, to: number): Promise<StockCandle | null> {
+    try {
+        const res = await fetch(
+            `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?interval=1d&period1=${from}&period2=${to}`,
+            {
+                next: { revalidate: 300 },
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+            }
+        );
+
+        if (!res.ok) return null;
+
+        const data = await res.json();
+        const result = data.chart?.result?.[0];
+        if (!result || !result.timestamp) return null;
+
+        const quote = result.indicators?.quote?.[0];
+        if (!quote) return null;
+
+        return {
+            open: quote.open || [],
+            high: quote.high || [],
+            low: quote.low || [],
+            close: quote.close || [],
+            volume: quote.volume || [],
+            timestamp: result.timestamp || [],
+        };
+    } catch (error) {
+        console.error(`Yahoo candle error for ${yahooSymbol}:`, error);
+        return null;
+    }
+}
+
 // ─── Finnhub API ────────────────────────────────────────────────
+
 
 const FINNHUB_BASE = "https://finnhub.io/api/v1";
 
@@ -32,6 +135,12 @@ export interface StockQuote {
  * Fetch a real-time stock quote from Finnhub.
  */
 export async function getStockQuote(symbol: string): Promise<StockQuote | null> {
+    const exchange = detectExchange(symbol);
+
+    if (exchange !== 'US') {
+        return fetchYahooQuote(ensureExchangeSuffix(symbol, exchange), symbol);
+    }
+
     try {
         const key = getFinnhubKey();
         const res = await fetch(
@@ -103,11 +212,17 @@ export async function getStockCandles(
     from?: number,
     to?: number
 ): Promise<StockCandle | null> {
+    const exchange = detectExchange(symbol);
+    const now = Math.floor(Date.now() / 1000);
+    const fromTs = from || now - 365 * 24 * 60 * 60; // Default: 1 year
+    const toTs = to || now;
+
+    if (exchange !== 'US') {
+        return fetchYahooCandles(ensureExchangeSuffix(symbol, exchange), fromTs, toTs);
+    }
+
     try {
         const key = getFinnhubKey();
-        const now = Math.floor(Date.now() / 1000);
-        const fromTs = from || now - 365 * 24 * 60 * 60; // Default: 1 year
-        const toTs = to || now;
 
         const res = await fetch(
             `${FINNHUB_BASE}/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=${resolution}&from=${fromTs}&to=${toTs}&token=${key}`,
@@ -236,7 +351,7 @@ export async function generateStockResearch(
     companyName?: string,
     modelId?: string
 ): Promise<ResearchReport> {
-    const settings = await getUserAiSettings().catch(() => null);
+    const settings = await getUserAiSettingsServer().catch(() => null);
     const { ModelRouter } = await import("@/lib/ai/model-router");
     const config = ModelRouter.resolveConfig(modelId ?? settings?.preferred_model ?? 'gemini-flash', settings);
 

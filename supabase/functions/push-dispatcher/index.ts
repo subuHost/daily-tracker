@@ -13,16 +13,35 @@ const corsHeaders = {
 };
 
 Deno.serve(async (req) => {
+    // 1. Early Secret Validation
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY");
+    const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY");
+    const vapidSubject = Deno.env.get("VAPID_SUBJECT") || "mailto:example@your-domain.com";
+
+    const missing = [];
+    if (!supabaseUrl) missing.push("SUPABASE_URL");
+    if (!supabaseServiceKey) missing.push("SUPABASE_SERVICE_ROLE_KEY");
+    if (!vapidPublicKey) missing.push("VAPID_PUBLIC_KEY");
+    if (!vapidPrivateKey) missing.push("VAPID_PRIVATE_KEY");
+    if (!vapidSubject) missing.push("VAPID_SUBJECT");
+
+    if (missing.length > 0) {
+        return new Response(JSON.stringify({ error: "Missing required secrets", missing }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: 500
+        });
+    }
+
     // Handle CORS
     if (req.method === "OPTIONS") {
         return new Response("ok", { headers: corsHeaders });
     }
 
     try {
-        const supabaseClient = createClient(
-            Deno.env.get("SUPABASE_URL") ?? "",
-            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-        );
+        const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
+
 
         // Payload from Database Webhook (INSERT into notifications)
         const body = await req.json().catch(() => ({}));
@@ -52,15 +71,8 @@ Deno.serve(async (req) => {
         }
 
         // Configure Web Push
-        const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY");
-        const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY");
-        const subject = Deno.env.get("VAPID_SUBJECT") || "mailto:example@your-domain.com";
+        webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
 
-        if (!vapidPublicKey || !vapidPrivateKey) {
-            throw new Error("VAPID keys not configured in Edge Function secrets");
-        }
-
-        webpush.setVapidDetails(subject, vapidPublicKey, vapidPrivateKey);
 
         const payload = JSON.stringify({
             title,

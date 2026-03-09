@@ -1,6 +1,23 @@
+-- ==========================================
+-- SETUP REQUIRED (Supabase Dashboard):
+-- 1. Deploy push-dispatcher Edge Function:
+--      supabase functions deploy push-dispatcher
+-- 2. Set VAPID secrets in Supabase:
+--      supabase secrets set VAPID_PUBLIC_KEY=<your_public_key> \
+--                           VAPID_PRIVATE_KEY=<your_private_key> \
+--                           VAPID_SUBJECT=mailto:you@example.com
+-- 3. Create DB Webhook in Supabase Dashboard:
+--      Database > Webhooks > New Webhook
+--      Table: notifications | Event: INSERT
+--      URL: https://<project-ref>.supabase.co/functions/v1/push-dispatcher
+-- 4. Set NEXT_PUBLIC_VAPID_PUBLIC_KEY in .env.local:
+--      NEXT_PUBLIC_VAPID_PUBLIC_KEY=<same value as VAPID_PUBLIC_KEY>
+--      (Generate keys with: npx web-push generate-vapid-keys)
+-- ==========================================
 -- Tech Plan — Phase 6C: Notification System
 -- New tables and schema extensions for notifications
 -- Run this in your Supabase SQL editor
+-- ==========================================
 
 -- ==========================================
 -- Extend user_preferences table
@@ -39,10 +56,15 @@ CREATE TABLE IF NOT EXISTS notifications (
 -- RLS policies for notifications
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view own notifications" ON notifications;
 CREATE POLICY "Users can view own notifications"
   ON notifications FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can update own notifications" ON notifications;
 CREATE POLICY "Users can update own notifications"
   ON notifications FOR UPDATE USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can delete own notifications" ON notifications;
 CREATE POLICY "Users can delete own notifications"
   ON notifications FOR DELETE USING (auth.uid() = user_id);
 
@@ -66,12 +88,19 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 -- RLS policies for push_subscriptions
 ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view own push_subscriptions" ON push_subscriptions;
 CREATE POLICY "Users can view own push_subscriptions"
   ON push_subscriptions FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert own push_subscriptions" ON push_subscriptions;
 CREATE POLICY "Users can insert own push_subscriptions"
   ON push_subscriptions FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can update own push_subscriptions" ON push_subscriptions;
 CREATE POLICY "Users can update own push_subscriptions"
   ON push_subscriptions FOR UPDATE USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can delete own push_subscriptions" ON push_subscriptions;
 CREATE POLICY "Users can delete own push_subscriptions"
   ON push_subscriptions FOR DELETE USING (auth.uid() = user_id);
 

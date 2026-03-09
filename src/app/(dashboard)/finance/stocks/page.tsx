@@ -38,15 +38,20 @@ import { fetchLivePrices } from "@/app/actions/finance";
 
 // Popular Indian stocks for quick access
 const POPULAR_SYMBOLS = [
-    { symbol: "RELIANCE", name: "Reliance Industries" },
-    { symbol: "TCS", name: "Tata Consultancy Services" },
-    { symbol: "INFY", name: "Infosys" },
-    { symbol: "HDFCBANK", name: "HDFC Bank" },
-    { symbol: "ICICIBANK", name: "ICICI Bank" },
-    { symbol: "HINDUNILVR", name: "Hindustan Unilever" },
-    { symbol: "BHARTIARTL", name: "Bharti Airtel" },
-    { symbol: "ITC", name: "ITC Limited" },
+    { symbol: "RELIANCE.NS", name: "Reliance Industries" },
+    { symbol: "TCS.NS", name: "Tata Consultancy Services" },
+    { symbol: "INFY.NS", name: "Infosys" },
+    { symbol: "HDFCBANK.NS", name: "HDFC Bank" },
+    { symbol: "ICICIBANK.NS", name: "ICICI Bank" },
+    { symbol: "HINDUNILVR.NS", name: "Hindustan Unilever" },
+    { symbol: "BHARTIARTL.NS", name: "Bharti Airtel" },
+    { symbol: "ITC.NS", name: "ITC Limited" },
+    { symbol: "SBIN.NS", name: "State Bank of India" },
+    { symbol: "KOTAKBANK.NS", name: "Kotak Mahindra Bank" },
+    { symbol: "LT.NS", name: "Larsen & Toubro" },
+    { symbol: "AXISBANK.NS", name: "Axis Bank" },
 ];
+
 
 export default function StocksPage() {
     const router = useRouter();
@@ -97,7 +102,8 @@ export default function StocksPage() {
             // Fetch live prices for stock investments
             const stockInvs = invs.filter((i) => i.type === "stock" || i.type === "mutual_fund");
             if (stockInvs.length > 0) {
-                const symbols = Array.from(new Set(stockInvs.map((i) => i.symbol.replace(/\.(NS|BO)$/i, ""))));
+                const symbols = Array.from(new Set(stockInvs.map((i) => i.symbol)));
+
                 const quotes = await getStockQuotes(symbols);
                 setPortfolioQuotes(quotes);
             }
@@ -202,11 +208,11 @@ export default function StocksPage() {
         0
     );
     const totalCurrentValue = investments.reduce((sum, inv) => {
-        const cleanSymbol = inv.symbol.replace(/\.(NS|BO)$/i, "");
-        const quote = portfolioQuotes[cleanSymbol];
+        const quote = portfolioQuotes[inv.symbol];
         const currentPrice = quote?.current || inv.current_price || inv.buy_price;
         return sum + currentPrice * Number(inv.quantity);
     }, 0);
+
     const totalGain = totalCurrentValue - totalInvested;
     const totalGainPercent = totalInvested > 0 ? (totalGain / totalInvested) * 100 : 0;
 
@@ -405,8 +411,7 @@ export default function StocksPage() {
                             {investments
                                 .filter((i) => i.type === "stock" || i.type === "mutual_fund")
                                 .map((inv) => {
-                                    const cleanSymbol = inv.symbol.replace(/\.(NS|BO)$/i, "");
-                                    const quote = portfolioQuotes[cleanSymbol];
+                                    const quote = portfolioQuotes[inv.symbol];
                                     if (quote) {
                                         return (
                                             <StockCard
@@ -414,7 +419,7 @@ export default function StocksPage() {
                                                 quote={quote}
                                                 name={inv.name || undefined}
                                                 onClick={() =>
-                                                    router.push(`/finance/stocks/${cleanSymbol}`)
+                                                    router.push(`/finance/stocks/${encodeURIComponent(inv.symbol)}`)
                                                 }
                                             />
                                         );
@@ -425,9 +430,10 @@ export default function StocksPage() {
                                             key={inv.id}
                                             className="cursor-pointer hover:bg-accent/50 transition-colors"
                                             onClick={() =>
-                                                router.push(`/finance/stocks/${cleanSymbol}`)
+                                                router.push(`/finance/stocks/${encodeURIComponent(inv.symbol)}`)
                                             }
                                         >
+
                                             <CardContent className="p-4">
                                                 <p className="font-bold text-sm">{inv.symbol}</p>
                                                 <p className="text-xs text-muted-foreground">{inv.name}</p>
