@@ -28,7 +28,8 @@ import {
     getSessionMessages,
     getChatSessions,
     sendMessageInSession,
-    getDailyContextAction
+    getDailyContextAction,
+    getAvailableModelsAction
 } from "@/app/actions/ai";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -43,7 +44,8 @@ export default function ChatPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [isInitialLoading, setIsInitialLoading] = useState(true);
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const [selectedModel, setSelectedModel] = useState<'flash' | 'pro'>('flash');
+    const [selectedModel, setSelectedModel] = useState<string>('gemini-flash');
+    const [availableModels, setAvailableModels] = useState<any[]>([]);
 
     const haptic = useHaptic();
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -52,11 +54,14 @@ export default function ChatPage() {
     useEffect(() => {
         async function init() {
             try {
+                const models = await getAvailableModelsAction();
+                setAvailableModels(models);
+
                 const latestSessions = await getChatSessions();
                 if (latestSessions && latestSessions.length > 0) {
                     setActiveSessionId(latestSessions[0].id);
                     if (latestSessions[0].model) {
-                        setSelectedModel(latestSessions[0].model as 'flash' | 'pro');
+                        setSelectedModel(latestSessions[0].model);
                     }
                 }
             } catch (e) {
@@ -83,7 +88,7 @@ export default function ChatPage() {
                 const latestSessions = await getChatSessions();
                 const session = latestSessions.find((s: any) => s.id === activeSessionId);
                 if (session?.model) {
-                    setSelectedModel(session.model as 'flash' | 'pro');
+                    setSelectedModel(session.model);
                 }
 
                 const fetched = await getSessionMessages(activeSessionId);
@@ -115,7 +120,7 @@ export default function ChatPage() {
         try {
             const session = await createChatSession();
             setActiveSessionId(session.id);
-            setSelectedModel('flash'); // Default for new chats
+            setSelectedModel('gemini-flash'); // Default for new chats
             setMessages([]);
             setSidebarOpen(false);
             haptic.triggerImpact();
@@ -219,7 +224,8 @@ export default function ChatPage() {
                         <ModelSelector
                             sessionId={activeSessionId}
                             currentModel={selectedModel}
-                            onModelChange={setSelectedModel}
+                            onModelChange={setSelectedModel as any}
+                            availableModels={availableModels}
                         />
                         <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
                         <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleNewChat}>
