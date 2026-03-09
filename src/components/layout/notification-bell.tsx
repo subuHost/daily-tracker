@@ -3,8 +3,9 @@
 // Tech Plan — Phase 6C: Notification System
 // Updated NotificationBell with Supabase Realtime support
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Bell } from "lucide-react";
 import { getUnreadCount } from "@/app/actions/notifications";
@@ -12,16 +13,19 @@ import { createClient } from "@/lib/supabase/client";
 
 export function NotificationBell() {
     const [count, setCount] = useState(0);
+    const pathname = usePathname();
+
+    const load = useCallback(async () => {
+        const initialCount = await getUnreadCount();
+        setCount(initialCount);
+    }, []);
+
+    useEffect(() => {
+        load();
+    }, [pathname, load]);
 
     useEffect(() => {
         const supabase = createClient();
-
-        async function load() {
-            const initialCount = await getUnreadCount();
-            setCount(initialCount);
-        }
-
-        load();
 
         // Subscribe to real-time notifications
         const channel = supabase
@@ -29,13 +33,12 @@ export function NotificationBell() {
             .on(
                 'postgres_changes',
                 {
-                    event: 'INSERT',
+                    event: '*',
                     schema: 'public',
                     table: 'notifications'
                 },
-                (payload) => {
-                    // Logic to increment if it's for current user (handled by RLS usually, but we check just in case)
-                    setCount(prev => prev + 1);
+                () => {
+                    load();
                 }
             )
             .subscribe();
@@ -43,7 +46,7 @@ export function NotificationBell() {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, []);
+    }, [load]);
 
     return (
         <Link href="/notifications">

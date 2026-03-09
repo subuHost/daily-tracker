@@ -77,6 +77,14 @@ const financeCards = [
         color: "text-cyan-500",
         bgColor: "bg-cyan-500/10",
     },
+    {
+        title: "Stocks",
+        description: "Market & AI Research",
+        href: "/finance/stocks",
+        icon: TrendingUp,
+        color: "text-emerald-500",
+        bgColor: "bg-emerald-500/10",
+    },
 ];
 
 export default function FinancePage() {

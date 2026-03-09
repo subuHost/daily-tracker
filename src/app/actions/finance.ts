@@ -1,6 +1,7 @@
 "use server";
 
 import { updateInvestment } from "@/lib/db/investments";
+import { getStockQuote } from "./stocks";
 
 interface InvestmentRef {
     id: string;
@@ -11,22 +12,26 @@ interface InvestmentRef {
 /**
  * Fetches live prices for a list of investments and updates the database.
  * Returns a map of investment IDs to their new prices.
+ *
+ * Stocks & Mutual Funds: Now uses Finnhub (was Yahoo Finance).
+ * Crypto: Still uses CoinGecko (free, reliable).
  */
 export async function fetchLivePrices(investments: InvestmentRef[]): Promise<Record<string, number>> {
     const results: Record<string, number> = {};
     const stocks = investments.filter(inv => inv.type === "stock" || inv.type === "mutual_fund");
     const cryptos = investments.filter(inv => inv.type === "crypto");
 
-    // Fetch Stocks & Mutual Funds via Yahoo Finance
+    // Fetch Stocks & Mutual Funds via Finnhub
     const stockPromises = stocks.map(async (inv) => {
         try {
-            const symbol = inv.type === "mutual_fund" && !inv.symbol.includes(".") ? `${inv.symbol}.BO` : inv.symbol; // Default to Bombay Stock Exchange for Indian mutual funds if no suffix
-            const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`);
-            const data = await res.json();
-            const price = data.chart.result[0].meta.regularMarketPrice;
-            if (price) {
-                results[inv.id] = price;
-                await updateInvestment(inv.id, { current_price: price });
+            // Finnhub uses exchange-specific symbols
+            // For NSE stocks, Finnhub uses the raw symbol (no .NS suffix)
+            const symbol = inv.symbol.replace(/\.(NS|BO)$/i, "");
+            const quote = await getStockQuote(symbol);
+
+            if (quote && quote.current > 0) {
+                results[inv.id] = quote.current;
+                await updateInvestment(inv.id, { current_price: quote.current });
             }
         } catch (error) {
             console.error(`Failed to fetch price for ${inv.symbol}:`, error);

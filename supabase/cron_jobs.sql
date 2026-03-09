@@ -24,7 +24,7 @@ BEGIN
         -- Check if there are any active habits not logged today
         AND EXISTS (
             SELECT 1 FROM habits h
-            LEFT JOIN habit_logs hl ON h.id = hl.habit_id AND hl.logged_at::date = CURRENT_DATE
+            LEFT JOIN habit_logs hl ON h.id = hl.habit_id AND hl.created_at::date = CURRENT_DATE
             WHERE h.user_id = up.user_id 
             AND h.is_active = TRUE
             AND hl.id IS NULL
@@ -62,7 +62,7 @@ BEGIN
         WHERE up.notif_journal_enabled = TRUE
         -- Check if no journal entry exists for today
         AND NOT EXISTS (
-            SELECT 1 FROM journal_entries je
+            SELECT 1 FROM daily_entries je
             WHERE je.user_id = up.user_id
             AND je.created_at::date = CURRENT_DATE
         )
@@ -161,13 +161,37 @@ $$ LANGUAGE plpgsql;
 -- ==========================================
 
 -- Habit Reminders at 9 PM IST
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'habit-reminders') THEN
+        PERFORM cron.unschedule('habit-reminders');
+    END IF;
+END $$;
 SELECT cron.schedule('habit-reminders', '30 15 * * *', 'SELECT generate_habit_notifications()');
 
 -- Journal Prompts at 8 PM IST
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'journal-prompts') THEN
+        PERFORM cron.unschedule('journal-prompts');
+    END IF;
+END $$;
 SELECT cron.schedule('journal-prompts', '30 14 * * *', 'SELECT generate_journal_notifications()');
 
 -- Finance Nudge at 10 PM IST
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'finance-nudge') THEN
+        PERFORM cron.unschedule('finance-nudge');
+    END IF;
+END $$;
 SELECT cron.schedule('finance-nudge', '30 16 * * *', 'SELECT generate_finance_notifications()');
 
 -- Bill Alerts at 10 AM IST
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'bill-overdue') THEN
+        PERFORM cron.unschedule('bill-overdue');
+    END IF;
+END $$;
 SELECT cron.schedule('bill-overdue', '30 4 * * *', 'SELECT generate_bill_notifications()');

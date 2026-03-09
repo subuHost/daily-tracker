@@ -158,6 +158,17 @@ const tools = {
                 },
                 required: ["query"]
             }
+        },
+        {
+            name: "web_search",
+            description: "Search the web for up-to-date information.",
+            parameters: {
+                type: SchemaType.OBJECT,
+                properties: {
+                    query: { type: SchemaType.STRING, description: "The search query" }
+                },
+                required: ["query"]
+            }
         }
     ]
 };
@@ -304,6 +315,18 @@ export async function chatWithAI(history: Message[], userContext?: string, model
                     resultText = "I couldn't find any similar meals in your history.";
                 }
                 output = { success: true, results: pastMeals };
+            } else if (call.name === "web_search") {
+                const { getUserAiSettingsServer } = await import("@/lib/db/user-settings");
+                const settings = await getUserAiSettingsServer();
+                if (settings?.perplexity_api_key) {
+                    const { createPerplexityClient, perplexitySearch } = await import("@/lib/ai/perplexity-client");
+                    const pClient = createPerplexityClient(settings.perplexity_api_key);
+                    const pResult = await perplexitySearch(pClient, args.query);
+                    resultText = `I found this information online:\n\n${pResult.content}\n\nCitations:\n${pResult.citations?.join("\n") || "None"}`;
+                } else {
+                    resultText = "Web search is unavailable. Please configure your Perplexity API key in Settings.";
+                }
+                output = { success: true, message: resultText };
             }
 
             // Persist the user message and assistant response to DB
@@ -797,7 +820,7 @@ export async function updateChatSessionTitle(sessionId: string, title: string) {
     if (error) throw error;
 }
 
-export async function updateSessionModel(sessionId: string, model: 'flash' | 'pro') {
+export async function updateSessionModel(sessionId: string, model: string) {
     const { createClient } = await import("@/lib/supabase/server");
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -870,6 +893,8 @@ export async function sendMessageInSession(
     history: Message[]
 ): Promise<Message> {
     const { createClient } = await import("@/lib/supabase/server");
+    const { getUserAiSettingsServer } = await import("@/lib/db/user-settings");
+    const { ModelRouter } = await import("@/lib/ai/model-router");
     const supabase = createClient();
 
     // Fetch session model
@@ -879,13 +904,23 @@ export async function sendMessageInSession(
         .eq("id", sessionId)
         .single();
 
-    const sessionModel = (sessionRow?.model as 'flash' | 'pro') || 'flash';
+    const sessionModel = sessionRow?.model || 'gemini-flash';
+    const settings = await getUserAiSettingsServer();
+    const config = ModelRouter.resolveConfig(sessionModel, settings);
 
     // 1. Get AI response using existing logic (with context etc)
     // We pass the history including the current content
     const fullHistory = [...history, { role: "user" as const, content }];
     const context = await getDailyContextAction();
-    const aiResponse = await chatWithAI(fullHistory, context, sessionModel);
+    const systemPrompt = SYSTEM_PROMPT + `\n\nHere is the user's current life snapshot for context. Use this to give more relevant, personalised answers:\n${context}`;
+
+    let aiResponseContent = "";
+    try {
+        aiResponseContent = await ModelRouter.chat(config, fullHistory, systemPrompt);
+    } catch (e: any) {
+        console.error("Router AI error", e);
+        aiResponseContent = `Error: ${e.message || "Something went wrong."}`;
+    }
 
     // Save user message
     await supabase.from("chat_session_messages").insert({
@@ -898,7 +933,7 @@ export async function sendMessageInSession(
     await supabase.from("chat_session_messages").insert({
         session_id: sessionId,
         role: "assistant",
-        content: aiResponse.content
+        content: aiResponseContent
     });
 
     // Update session timestamp
@@ -928,7 +963,7 @@ export async function sendMessageInSession(
         }
     }
 
-    return aiResponse;
+    return { role: "assistant", content: aiResponseContent };
 }
 
 // Deterministic fallback briefing when Gemini is unavailable
@@ -1095,4 +1130,11 @@ Constraint: Do not provide code examples or the final solution text.`;
         console.error("AI Hint Generation Error:", error);
         return null;
     }
+}
+
+export async function getAvailableModelsAction() {
+    const { getUserAiSettingsServer } = await import("@/lib/db/user-settings");
+    const { ModelRouter } = await import("@/lib/ai/model-router");
+    const settings = await getUserAiSettingsServer();
+    return ModelRouter.getAvailableModels(settings);
 }
