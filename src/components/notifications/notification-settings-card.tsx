@@ -8,10 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { requestPushPermission } from '@/lib/push';
+import { requestPushPermission, checkPushStatus } from '@/lib/push';
 import { updateNotificationSettings, getNotificationSettings } from '@/app/actions/notifications';
 import { toast } from 'sonner';
-import { Bell, Clock, Calendar, Briefcase, Smile, BookOpen, Receipt, LineChart } from 'lucide-react';
+import { Bell, Clock, Calendar, Briefcase, Smile, BookOpen, Receipt, LineChart, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 
 interface NotificationSettingsProps {
     initialSettings?: any;
@@ -21,6 +21,16 @@ export function NotificationSettingsCard({ initialSettings }: NotificationSettin
     const [settings, setSettings] = useState(initialSettings || {});
     const [loading, setLoading] = useState(false);
     const [pushLoading, setPushLoading] = useState(false);
+    const [pushStatus, setPushStatus] = useState<{ subscribed: boolean; vapidConfigured: boolean; error?: string } | null>(null);
+
+    useEffect(() => {
+        const checkStatus = async () => {
+            const status = await checkPushStatus();
+            setPushStatus(status);
+        };
+        checkStatus();
+    }, []);
+
 
     useEffect(() => {
         if (!initialSettings) {
@@ -56,6 +66,9 @@ export function NotificationSettingsCard({ initialSettings }: NotificationSettin
             toast.success('Push notifications enabled!');
             setSettings({ ...settings, push_enabled: true });
             await updateNotificationSettings({ push_enabled: true });
+            const status = await checkPushStatus();
+            setPushStatus(status);
+
         } else {
             toast.error(`Push error: ${result.error}`);
         }
@@ -219,7 +232,26 @@ export function NotificationSettingsCard({ initialSettings }: NotificationSettin
                                 {pushLoading ? 'Enabling...' : settings.push_enabled ? 'Enabled' : 'Enable'}
                             </Button>
                         </div>
+
+                        {pushStatus && (
+                            <div className="pt-1">
+                                {!pushStatus.vapidConfigured ? (
+                                    <p className="text-xs text-muted-foreground flex items-center gap-1.5 italic">
+                                        ❌ VAPID key not configured
+                                    </p>
+                                ) : pushStatus.subscribed ? (
+                                    <p className="text-xs text-emerald-500 font-medium flex items-center gap-1.5">
+                                        ✅ Push subscription active
+                                    </p>
+                                ) : (
+                                    <p className="text-xs text-amber-500 font-medium flex items-center gap-1.5">
+                                        ⚠️ Not subscribed — click Enable Notifications
+                                    </p>
+                                )}
+                            </div>
+                        )}
                     </div>
+
                 </div>
 
             </CardContent>

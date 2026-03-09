@@ -509,17 +509,21 @@ Always provide integer values for nutritional data.`;
             lastError = error;
             console.error(`Food image analysis error (attempt ${attempt + 1}/${maxRetries}):`, error);
 
-            // Check if it's a quota/rate limit error (429)
-            if (error.status === 429 || error.message?.includes('429') || error.message?.includes('quota')) {
+            // Check if it's a transient error (quota, 503, etc.)
+            const isTransient = error.status === 429 || error.status === 503 ||
+                error.message?.includes('429') || error.message?.includes('503') ||
+                error.message?.includes('quota') || error.message?.includes('demand');
+
+            if (isTransient) {
                 // Mark this key as failed so it's skipped temporarily
                 const failedKey = getCurrentKey();
                 if (failedKey) {
                     markKeyFailed(failedKey);
-                    console.log(`Marked key as failed, will try another key...`);
+                    console.log(`Marked key as failed due to transient error, will try another key...`);
                 }
 
                 // Small delay before retry
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
                 continue; // Try next key
             }
 
@@ -573,7 +577,7 @@ export async function getDailyContext(): Promise<DailyContext> {
         // 2. Habits
         getHabits(supabase),
         // 3. Budget
-        supabase.from("budgets").select("amount").eq("user_id", user.id).eq("month", monthStr).single(),
+        supabase.from("budgets").select("amount").eq("user_id", user.id).eq("month", now.getMonth() + 1).eq("year", now.getFullYear()).single(),
         // 4. Expenses
         supabase.from("transactions").select("amount, description").eq("user_id", user.id).eq("type", "expense").gte("date", monthStr).lte("date", endDate),
         // 5. Food logs
@@ -719,12 +723,15 @@ export async function generateDailyBriefing(): Promise<{ briefing: string }> {
         // 3. Try AI generation, fall back to deterministic if no API key or failure
         let briefing: string;
 
-        if (genAI) {
+        if (hasApiKeys()) {
             try {
-                const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
-                const prompt = `You are a concise, motivational personal assistant. Based on the user's data snapshot below, write a 3-4 sentence morning briefing. Be encouraging but realistic. Mention specific numbers. Do NOT use markdown formatting — plain text only.\n\nUser data:\n${contextString}`;
-                const result = await model.generateContent(prompt);
-                briefing = result.response.text().trim();
+                const { ModelRouter } = await import("@/lib/ai/model-router");
+                const config = ModelRouter.resolveConfig('gemini-flash', null);
+                const systemPrompt = "You are a concise, motivational personal assistant.";
+                const prompt = `Based on the user's data snapshot below, write a 3-4 sentence morning briefing. Be encouraging but realistic. Mention specific numbers. Do NOT use markdown formatting — plain text only.\n\nUser data:\n${contextString}`;
+
+                briefing = await ModelRouter.chat(config, [{ role: "user", content: prompt }], systemPrompt);
+                briefing = briefing.trim();
             } catch (aiError) {
                 console.error("Gemini briefing generation failed, using fallback:", aiError);
                 briefing = buildFallbackBriefing(ctx);

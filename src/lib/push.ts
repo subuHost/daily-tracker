@@ -50,6 +50,27 @@ export async function requestPushPermission() {
     }
 }
 
+/**
+ * Check the current push subscription status and VAPID configuration.
+ */
+export async function checkPushStatus(): Promise<{ subscribed: boolean; vapidConfigured: boolean; error?: string }> {
+    const vapidConfigured = !!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        return { subscribed: false, vapidConfigured, error: 'Push not supported in this browser' };
+    }
+
+    try {
+        const registration = await navigator.serviceWorker.ready;
+        const sub = await registration.pushManager.getSubscription();
+        return { subscribed: !!sub, vapidConfigured };
+    } catch (error) {
+        console.error('Error checking push status:', error);
+        return { subscribed: false, vapidConfigured, error: (error as Error).message };
+    }
+}
+
+
 function urlBase64ToUint8Array(base64String: string) {
     const padding = '='.repeat((4 - base64String.length % 4) % 4);
     const base64 = (base64String + padding)
