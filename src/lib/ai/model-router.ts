@@ -4,7 +4,7 @@ import { getGeminiClient, hasApiKeys } from "./gemini-client";
 import { createOpenAIClient, openaiChat } from "./openai-client";
 import { createClaudeClient, claudeChat } from "./claude-client";
 import { createPerplexityClient, perplexitySearch } from "./perplexity-client";
-import { getUserAiSettingsServer } from "@/lib/db/user-settings";
+import { getUserAiSettingsServer } from "@/lib/db/user-settings.server";
 
 export type Provider = 'gemini' | 'openai' | 'claude' | 'grok';
 
