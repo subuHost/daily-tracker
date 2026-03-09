@@ -6,6 +6,7 @@ import { HabitsWidget } from "@/components/dashboard/habits-widget";
 import { NetWorthWidget } from "@/components/dashboard/net-worth-widget";
 import { QuickLinksWidget } from "@/components/dashboard/quick-links-widget";
 import { AIDailyBriefingWidget } from "@/components/dashboard/ai-briefing-widget";
+import { TechTrendsCard } from "@/components/dashboard/tech-trends-card";
 import { EventsWidget } from "@/components/widgets/events-widget";
 import { HealthWidget } from "@/components/dashboard/health-widget";
 import { TransactionReviewStack } from "@/components/dashboard/transaction-review-stack";
@@ -154,9 +155,14 @@ export default async function DashboardPage() {
                     <h1 className="text-xl font-bold tracking-tight">{greeting}</h1>
                 </div>
 
-                <Suspense fallback={<WidgetSkeleton />}>
-                    <AIDailyBriefingWidget />
-                </Suspense>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <Suspense fallback={<WidgetSkeleton />}>
+                        <AIDailyBriefingWidget />
+                    </Suspense>
+                    <Suspense fallback={<WidgetSkeleton />}>
+                        <TechTrendsCard />
+                    </Suspense>
+                </div>
             </div>
 
             {/* Draggable & Customizable Grid */}

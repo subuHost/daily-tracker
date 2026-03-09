@@ -15,7 +15,8 @@ import {
     ChevronRight,
     Search,
     MessageCircle,
-    Plus
+    Plus,
+    Globe
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +30,8 @@ import {
     getChatSessions,
     sendMessageInSession,
     getDailyContextAction,
-    getAvailableModelsAction
+    getAvailableModelsAction,
+    webSearchAction
 } from "@/app/actions/ai";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -46,6 +48,7 @@ export default function ChatPage() {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [selectedModel, setSelectedModel] = useState<string>('gemini-flash');
     const [availableModels, setAvailableModels] = useState<any[]>([]);
+    const [webSearchMode, setWebSearchMode] = useState(false);
 
     const haptic = useHaptic();
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -150,8 +153,9 @@ export default function ChatPage() {
             }
         }
 
-        const userMsg: Message = { role: "user", content: input };
+        const userMsg: Message = { role: "user", content: webSearchMode ? `🌐 ${input}` : input };
         setMessages(prev => [...prev, userMsg]);
+        const currentInput = input;
         setInput("");
         setIsLoading(true);
         haptic.triggerTap();
@@ -160,16 +164,30 @@ export default function ChatPage() {
             if (!sessionId) {
                 throw new Error("No session created");
             }
-            const response = await sendMessageInSession(sessionId, input, messages);
+
+            let responseContent: string;
+
+            if (webSearchMode) {
+                // Direct web search via Perplexity/Gemini
+                const searchResult = await webSearchAction(currentInput);
+                responseContent = searchResult.content;
+                if (searchResult.citations && searchResult.citations.length > 0) {
+                    responseContent += "\n\n**Sources:**\n" + searchResult.citations.map((c: string) => `- ${c}`).join("\n");
+                }
+            } else {
+                // Normal chat flow
+                const response = await sendMessageInSession(sessionId, currentInput, messages);
+                responseContent = response.content;
+            }
+
             setMessages(prev => [...prev, {
                 role: "assistant",
-                content: response.content
+                content: responseContent
             }]);
             haptic.triggerSuccess();
         } catch (error) {
             console.error("Failed to send message:", error);
             toast.error("Failed to get response from AI");
-            // Optionally remove user message if failed
         } finally {
             setIsLoading(false);
         }
@@ -220,19 +238,19 @@ export default function ChatPage() {
                         </div>
                     </div>
 
-                    <div className="hidden sm:flex items-center gap-3">
+                    <div className="flex items-center gap-1.5 sm:gap-3">
                         <ModelSelector
                             sessionId={activeSessionId}
                             currentModel={selectedModel}
                             onModelChange={setSelectedModel as any}
                             availableModels={availableModels}
                         />
-                        <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
-                        <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleNewChat}>
+                        <div className="hidden sm:block h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
+                        <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 hidden sm:flex" onClick={handleNewChat}>
                             <Plus className="h-3.5 w-3.5" />
                             New Chat
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hidden sm:flex">
                             <History className="h-4 w-4 text-slate-400" />
                         </Button>
                     </div>
@@ -266,16 +284,29 @@ export default function ChatPage() {
                         </div>
 
                         <Input
-                            placeholder="Ask about your day, log food, or project finances..."
+                            placeholder={webSearchMode ? "Search the web..." : "Ask about your day, log food, or project finances..."}
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             disabled={isLoading}
-                            className="w-full bg-slate-100 dark:bg-slate-900 border-none pl-12 pr-28 h-12 rounded-2xl focus-visible:ring-2 focus-visible:ring-blue-500 transition-all shadow-inner"
+                            className={`w-full border-none pl-12 pr-36 h-12 rounded-2xl focus-visible:ring-2 transition-all shadow-inner ${webSearchMode
+                                ? "bg-violet-50 dark:bg-violet-950/30 focus-visible:ring-violet-500"
+                                : "bg-slate-100 dark:bg-slate-900 focus-visible:ring-blue-500"
+                                }`}
                         />
 
                         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-blue-500 rounded-full">
-                                <Mic className="h-4 w-4" />
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setWebSearchMode(!webSearchMode)}
+                                className={`h-8 w-8 rounded-full transition-colors ${webSearchMode
+                                    ? "text-violet-600 bg-violet-100 dark:bg-violet-900/30 hover:bg-violet-200"
+                                    : "text-slate-400 hover:text-violet-500"
+                                    }`}
+                                title={webSearchMode ? "Web search ON" : "Enable web search"}
+                            >
+                                <Globe className="h-4 w-4" />
                             </Button>
                             <Button
                                 type="submit"
@@ -288,7 +319,7 @@ export default function ChatPage() {
                         </div>
                     </form>
                     <p className="text-[10px] text-center text-slate-400 mt-3 font-medium">
-                        Tips: "How much did I spend in Feb?" or "Log a 300kcal healthy snack"
+                        {webSearchMode ? "🌐 Web search enabled — results powered by Perplexity" : 'Tips: "How much did I spend in Feb?" or "Log a 300kcal healthy snack"'}
                     </p>
                 </div>
             </main>

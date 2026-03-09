@@ -1,0 +1,106 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Zap, RefreshCw, Loader2, ExternalLink, Sparkles } from "lucide-react";
+import { generateTechBriefing } from "@/app/actions/ai";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+export function TechTrendsCard() {
+    const [briefing, setBriefing] = useState<string>("");
+    const [citations, setCitations] = useState<string[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+
+    const loadBriefing = async (forceRefresh = false) => {
+        if (forceRefresh) setIsRefreshing(true);
+        else setIsLoading(true);
+
+        try {
+            const result = await generateTechBriefing();
+            setBriefing(result.briefing);
+            setCitations(result.citations || []);
+        } catch (error) {
+            console.error("Failed to load tech briefing:", error);
+            setBriefing("Failed to load tech trends. Please try again.");
+        } finally {
+            setIsLoading(false);
+            setIsRefreshing(false);
+        }
+    };
+
+    useEffect(() => {
+        loadBriefing();
+    }, []);
+
+    return (
+        <Card className="overflow-hidden border-violet-500/20 bg-gradient-to-br from-violet-500/5 via-transparent to-fuchsia-500/5">
+            <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                    <CardTitle className="text-base flex items-center gap-2">
+                        <div className="p-1.5 rounded-lg bg-violet-500/10">
+                            <Zap className="h-4 w-4 text-violet-500" />
+                        </div>
+                        AI & Tech Trends
+                        <span className="text-[10px] font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                            Today
+                        </span>
+                    </CardTitle>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => loadBriefing(true)}
+                        disabled={isRefreshing}
+                    >
+                        <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                    </Button>
+                </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+                {isLoading ? (
+                    <div className="flex items-center gap-3 text-muted-foreground py-6">
+                        <Loader2 className="h-5 w-5 animate-spin text-violet-500" />
+                        <div>
+                            <p className="text-sm font-medium">Scanning the tech landscape...</p>
+                            <p className="text-xs text-muted-foreground">Powered by AI with web search</p>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        <div className="prose dark:prose-invert prose-sm max-w-none text-sm leading-relaxed">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {briefing}
+                            </ReactMarkdown>
+                        </div>
+                        {citations.length > 0 && (
+                            <div className="pt-2 border-t">
+                                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Sources</p>
+                                <div className="flex flex-wrap gap-1">
+                                    {citations.slice(0, 4).map((citation, i) => (
+                                        <a
+                                            key={i}
+                                            href={citation}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-[10px] text-violet-600 dark:text-violet-400 hover:underline flex items-center gap-0.5 bg-violet-500/5 px-2 py-0.5 rounded-full"
+                                        >
+                                            <ExternalLink className="h-2.5 w-2.5" />
+                                            {new URL(citation).hostname.replace("www.", "")}
+                                        </a>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                            <Sparkles className="h-3 w-3" />
+                            <span>Generated by Gemini{citations.length > 0 ? " + Perplexity" : ""}</span>
+                        </div>
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
