@@ -1145,3 +1145,148 @@ export async function getAvailableModelsAction() {
     const settings = await getUserAiSettingsServer();
     return ModelRouter.getAvailableModels(settings);
 }
+
+/**
+ * Generate a daily AI/tech trend briefing.
+ * Uses Perplexity for web search (if key available) + Gemini for synthesis.
+ * Caches result in daily_briefings table with type='tech_trends'.
+ */
+export async function generateTechBriefing(): Promise<{ briefing: string; citations: string[] }> {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { briefing: "Please sign in to view tech trends.", citations: [] };
+
+    const today = new Date().toISOString().split("T")[0];
+
+    // Check cache first
+    const { data: cached } = await supabase
+        .from("daily_briefings")
+        .select("content")
+        .eq("user_id", user.id)
+        .eq("date", today)
+        .eq("type", "tech_trends")
+        .single();
+
+    if (cached?.content) {
+        return { briefing: cached.content, citations: [] };
+    }
+
+    let newsContent = "";
+    let citations: string[] = [];
+
+    // Step 1: Try Perplexity for fresh web search
+    const { getUserAiSettingsServer } = await import("@/lib/db/user-settings.server");
+    const settings = await getUserAiSettingsServer().catch(() => null);
+
+    if (settings?.perplexity_api_key) {
+        try {
+            const { createPerplexityClient, perplexitySearch } = await import("@/lib/ai/perplexity-client");
+            const perplexity = createPerplexityClient(settings.perplexity_api_key);
+            const result = await perplexitySearch(perplexity,
+                "What are the top AI, technology, and startup news and trends today? Include product launches, funding rounds, breakthrough research, and industry shifts. Focus on the most impactful developments from the last 24 hours."
+            );
+            newsContent = result.content;
+            citations = result.citations || [];
+        } catch (error) {
+            console.error("Perplexity tech search failed:", error);
+        }
+    }
+
+    // Step 2: Use Gemini to synthesize a concise briefing
+    const genAI = getGeminiClient();
+    if (!genAI) {
+        return { briefing: "AI key not configured. Set GEMINI_API_KEY in .env.local.", citations: [] };
+    }
+
+    try {
+        const model = genAI.getGenerativeModel({
+            model: "gemini-flash-latest",
+            generationConfig: { temperature: 0.7 }
+        });
+
+        const prompt = newsContent
+            ? `Based on the following recent news, create a concise morning briefing about today's top AI and technology trends. Format as markdown with 4-6 bullet points. Be specific with names, numbers, and dates. Keep it under 300 words.\n\nRecent news:\n${newsContent}`
+            : `Create a concise morning briefing about today's top AI and technology trends for ${today}. Cover recent developments in AI models, tech products, startups, and industry shifts. Format as markdown with 4-6 bullet points. Be specific. Keep it under 300 words.`;
+
+        const result = await model.generateContent(prompt);
+        const briefing = result.response.text();
+
+        // Cache the result
+        try {
+            await supabase.from("daily_briefings").upsert({
+                user_id: user.id,
+                date: today,
+                type: "tech_trends",
+                content: briefing,
+            }, { onConflict: "user_id,date,type" });
+        } catch (err: any) {
+            // If upsert fails (e.g., missing type column), try insert
+            console.warn("Upsert failed, trying insert:", err.message);
+            try {
+                await supabase.from("daily_briefings").insert({
+                    user_id: user.id,
+                    date: today,
+                    content: briefing,
+                });
+            } catch { /* ignore cache failure */ }
+        }
+
+        return { briefing, citations };
+    } catch (error) {
+        console.error("Tech briefing generation failed:", error);
+        return { briefing: "Could not generate tech briefing. Please try again later.", citations: [] };
+    }
+}
+
+/**
+ * Web search action — searches the web using Perplexity and returns results.
+ * Used by the chat assistant for explicit web search requests.
+ */
+export async function webSearchAction(query: string): Promise<{ content: string; citations: string[] }> {
+    const { getUserAiSettingsServer } = await import("@/lib/db/user-settings.server");
+    const settings = await getUserAiSettingsServer().catch(() => null);
+
+    if (!settings?.perplexity_api_key) {
+        // Fallback: use Gemini with grounding
+        const genAI = getGeminiClient();
+        if (!genAI) return { content: "No AI keys configured.", citations: [] };
+
+        try {
+            const model = genAI.getGenerativeModel({
+                model: "gemini-flash-latest",
+                generationConfig: { temperature: 0.3 }
+            });
+
+            const result = await model.generateContent(`Search the web and answer this query with the most up-to-date information. Include specific details, dates, and sources where possible.\n\nQuery: ${query}`);
+            return { content: result.response.text(), citations: [] };
+        } catch (error) {
+            return { content: `Search failed: ${(error as Error).message}`, citations: [] };
+        }
+    }
+
+    try {
+        const { createPerplexityClient } = await import("@/lib/ai/perplexity-client");
+        const OpenAI = (await import("openai")).default;
+        const client = new OpenAI({
+            apiKey: settings.perplexity_api_key,
+            baseURL: "https://api.perplexity.ai",
+        });
+
+        const response = await client.chat.completions.create({
+            model: "sonar",
+            messages: [
+                { role: "system", content: "You are a helpful research assistant. Provide detailed, factual answers with specific information. Use markdown formatting." },
+                { role: "user", content: query }
+            ],
+            temperature: 0.2,
+        });
+
+        const content = response.choices[0]?.message?.content || "";
+        const citations: string[] = (response as any).citations || [];
+
+        return { content, citations };
+    } catch (error) {
+        return { content: `Web search failed: ${(error as Error).message}`, citations: [] };
+    }
+}

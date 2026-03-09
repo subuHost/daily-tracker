@@ -295,7 +295,7 @@ export async function getCompanyProfile(symbol: string): Promise<CompanyProfile 
 }
 
 /**
- * Search for stock symbols via Finnhub.
+ * Search for stock symbols via Finnhub (US stocks).
  */
 export async function searchSymbol(
     query: string
@@ -319,6 +319,56 @@ export async function searchSymbol(
             }));
     } catch (error) {
         console.error(`Symbol search failed for "${query}":`, error);
+        return [];
+    }
+}
+
+/**
+ * Search for Indian stocks using Yahoo Finance search API (free, no key).
+ * Returns NSE/BSE stock suggestions with company name and current price.
+ */
+export async function searchIndianStocks(
+    query: string
+): Promise<{ symbol: string; name: string; exchange: string; type: string }[]> {
+    if (!query || query.length < 2) return [];
+
+    try {
+        const res = await fetch(
+            `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0&listsCount=0`,
+            {
+                next: { revalidate: 60 },
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
+            }
+        );
+
+        if (!res.ok) return [];
+
+        const data = await res.json();
+        const quotes = data.quotes || [];
+
+        // Filter to Indian exchanges only (NSE, BSE/BOM)
+        return quotes
+            .filter((q: any) => {
+                const exchange = (q.exchange || '').toUpperCase();
+                return exchange === 'NSI' || exchange === 'NSE' || exchange === 'BOM' || exchange === 'BSE' ||
+                    (q.symbol || '').endsWith('.NS') || (q.symbol || '').endsWith('.BO');
+            })
+            .map((q: any) => {
+                // Clean up symbol — keep raw name without .NS/.BO for display
+                const rawSymbol = (q.symbol || '').replace(/\.(NS|BO)$/i, '');
+                const exchange = (q.symbol || '').endsWith('.BO') ? 'BSE' : 'NSE';
+                return {
+                    symbol: rawSymbol,
+                    name: q.longname || q.shortname || q.symbol,
+                    exchange,
+                    type: q.quoteType || 'EQUITY',
+                };
+            })
+            .slice(0, 8);
+    } catch (error) {
+        console.error(`Indian stock search failed for "${query}":`, error);
         return [];
     }
 }

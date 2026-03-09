@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { ChevronLeft, Loader2 } from "lucide-react";
+import { ChevronLeft, Loader2, Search, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { createInvestment } from "@/lib/db";
+import { searchIndianStocks, getStockQuote } from "@/app/actions/stocks";
 
 const investmentSchema = z.object({
     symbol: z.string().min(1, "Symbol is required"),
@@ -34,14 +35,29 @@ const investmentSchema = z.object({
 
 type InvestmentForm = z.infer<typeof investmentSchema>;
 
+interface StockSuggestion {
+    symbol: string;
+    name: string;
+    exchange: string;
+    type: string;
+}
+
 export default function NewInvestmentPage() {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [suggestions, setSuggestions] = useState<StockSuggestion[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [isFetchingPrice, setIsFetchingPrice] = useState(false);
+    const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
 
     const {
         register,
         handleSubmit,
         setValue,
+        watch,
         formState: { errors },
     } = useForm<InvestmentForm>({
         resolver: zodResolver(investmentSchema),
@@ -50,6 +66,71 @@ export default function NewInvestmentPage() {
             type: "stock",
         },
     });
+
+    const selectedSymbol = watch("symbol");
+
+    // Close dropdown on outside click
+    useEffect(() => {
+        function handleClick(e: MouseEvent) {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+                setShowSuggestions(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClick);
+        return () => document.removeEventListener("mousedown", handleClick);
+    }, []);
+
+    // Debounced search
+    const handleSearchChange = (value: string) => {
+        setSearchQuery(value);
+        setValue("symbol", value.toUpperCase());
+
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current);
+        }
+
+        if (value.length < 2) {
+            setSuggestions([]);
+            setShowSuggestions(false);
+            return;
+        }
+
+        setIsSearching(true);
+        searchTimeoutRef.current = setTimeout(async () => {
+            try {
+                const results = await searchIndianStocks(value);
+                setSuggestions(results);
+                setShowSuggestions(results.length > 0);
+            } catch (error) {
+                console.error("Search failed:", error);
+            } finally {
+                setIsSearching(false);
+            }
+        }, 350);
+    };
+
+    // Select a stock from suggestions
+    const handleSelectStock = async (stock: StockSuggestion) => {
+        setValue("symbol", stock.symbol);
+        setValue("name", stock.name);
+        setSearchQuery(stock.symbol);
+        setShowSuggestions(false);
+        setSuggestions([]);
+
+        // Fetch current price
+        setIsFetchingPrice(true);
+        try {
+            const quote = await getStockQuote(stock.symbol);
+            if (quote && quote.current > 0) {
+                setValue("buyPrice", quote.current.toFixed(2));
+                toast.success(`Current price: ₹${quote.current.toFixed(2)}`);
+            }
+        } catch (error) {
+            console.error("Price fetch failed:", error);
+        } finally {
+            setIsFetchingPrice(false);
+        }
+    };
 
     const onSubmit = async (data: InvestmentForm) => {
         setIsLoading(true);
@@ -110,20 +191,67 @@ export default function NewInvestmentPage() {
                             </Select>
                         </div>
 
-                        <div className="space-y-2">
+                        {/* Symbol with Autocomplete */}
+                        <div className="space-y-2 relative" ref={dropdownRef}>
                             <Label htmlFor="symbol">Symbol / Ticker</Label>
-                            <Input
-                                id="symbol"
-                                placeholder="e.g., RELIANCE, BTC, HDFC MF"
-                                {...register("symbol")}
-                            />
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    id="symbol"
+                                    placeholder="Search stocks... e.g., Reliance, HDFC"
+                                    value={searchQuery}
+                                    onChange={(e) => handleSearchChange(e.target.value)}
+                                    onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+                                    className="pl-9 pr-8"
+                                    autoComplete="off"
+                                />
+                                {isSearching && (
+                                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                                )}
+                                {searchQuery && !isSearching && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setSearchQuery("");
+                                            setValue("symbol", "");
+                                            setValue("name", "");
+                                            setSuggestions([]);
+                                        }}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2"
+                                    >
+                                        <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                                    </button>
+                                )}
+                            </div>
                             {errors.symbol && (
                                 <p className="text-sm text-destructive">{errors.symbol.message}</p>
+                            )}
+
+                            {/* Suggestions Dropdown */}
+                            {showSuggestions && suggestions.length > 0 && (
+                                <div className="absolute z-50 w-full mt-1 bg-card border border-border rounded-xl shadow-xl overflow-hidden animate-in fade-in-0 slide-in-from-top-2 duration-200">
+                                    {suggestions.map((stock, i) => (
+                                        <button
+                                            key={`${stock.symbol}-${stock.exchange}-${i}`}
+                                            type="button"
+                                            onClick={() => handleSelectStock(stock)}
+                                            className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-accent/50 transition-colors border-b border-border/50 last:border-b-0"
+                                        >
+                                            <div className="min-w-0">
+                                                <p className="font-semibold text-sm">{stock.symbol}</p>
+                                                <p className="text-xs text-muted-foreground truncate">{stock.name}</p>
+                                            </div>
+                                            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary shrink-0 ml-2">
+                                                {stock.exchange}
+                                            </span>
+                                        </button>
+                                    ))}
+                                </div>
                             )}
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="name">Name (optional)</Label>
+                            <Label htmlFor="name">Name (auto-filled)</Label>
                             <Input
                                 id="name"
                                 placeholder="Full name of the investment"
@@ -133,7 +261,10 @@ export default function NewInvestmentPage() {
 
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label htmlFor="buyPrice">Buy Price (₹)</Label>
+                                <Label htmlFor="buyPrice">
+                                    Buy Price (₹)
+                                    {isFetchingPrice && <Loader2 className="inline ml-1 h-3 w-3 animate-spin" />}
+                                </Label>
                                 <Input
                                     id="buyPrice"
                                     type="number"
