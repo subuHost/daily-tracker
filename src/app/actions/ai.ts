@@ -316,7 +316,7 @@ export async function chatWithAI(history: Message[], userContext?: string, model
                 }
                 output = { success: true, results: pastMeals };
             } else if (call.name === "web_search") {
-                const { getUserAiSettingsServer } = await import("@/lib/db/user-settings");
+                const { getUserAiSettingsServer } = await import("@/lib/db/user-settings.server");
                 const settings = await getUserAiSettingsServer();
                 if (settings?.perplexity_api_key) {
                     const { createPerplexityClient, perplexitySearch } = await import("@/lib/ai/perplexity-client");
@@ -893,7 +893,7 @@ export async function sendMessageInSession(
     history: Message[]
 ): Promise<Message> {
     const { createClient } = await import("@/lib/supabase/server");
-    const { getUserAiSettingsServer } = await import("@/lib/db/user-settings");
+    const { getUserAiSettingsServer } = await import("@/lib/db/user-settings.server");
     const { ModelRouter } = await import("@/lib/ai/model-router");
     const supabase = createClient();
 
@@ -1133,7 +1133,7 @@ Constraint: Do not provide code examples or the final solution text.`;
 }
 
 export async function getAvailableModelsAction() {
-    const { getUserAiSettingsServer } = await import("@/lib/db/user-settings");
+    const { getUserAiSettingsServer } = await import("@/lib/db/user-settings.server");
     const { ModelRouter } = await import("@/lib/ai/model-router");
     const settings = await getUserAiSettingsServer();
     return ModelRouter.getAvailableModels(settings);

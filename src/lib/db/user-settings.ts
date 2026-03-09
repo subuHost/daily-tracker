@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
-import { createClient as createServerClient } from "@/lib/supabase/server";
+
 
 export type PreferredModel =
     | 'gemini-flash'
@@ -50,24 +50,7 @@ export async function getUserAiSettings(): Promise<UserAiSettings | null> {
     return data || null;
 }
 
-/**
- * Get user's AI settings (server-side)
- */
-export async function getUserAiSettingsServer(): Promise<UserAiSettings | null> {
-    const supabase = await createServerClient();
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("Not authenticated");
-
-    const { data, error } = await supabase
-        .from("user_ai_settings")
-        .select("*")
-        .eq("user_id", user.id)
-        .single();
-
-    if (error && error.code !== "PGRST116") throw error;
-    return data || null;
-}
 
 /**
  * Upsert user's AI settings.
