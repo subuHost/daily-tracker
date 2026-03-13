@@ -205,12 +205,30 @@ export default function WebSearchPage() {
 
                     {/* Empty state */}
                     {!result && !isSearching && recentSearches.length === 0 && (
-                        <div className="flex flex-col items-center justify-center py-20 text-center text-muted-foreground gap-3">
-                            <Search className="h-10 w-10 opacity-20" />
-                            <p className="text-sm font-medium">Search anything</p>
-                            <p className="text-xs max-w-xs">
-                                Ask questions, research topics, get up-to-date information powered by web search AI.
-                            </p>
+                        <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-4">
+                            <div className="relative">
+                                <div className="absolute inset-0 rounded-full bg-emerald-500/10 scale-[2.5] animate-pulse" />
+                                <div className="relative w-14 h-14 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                                    <Search className="h-7 w-7 text-emerald-500/60" />
+                                </div>
+                            </div>
+                            <div>
+                                <p className="text-sm font-semibold text-foreground">Search anything</p>
+                                <p className="text-xs mt-1 max-w-xs">
+                                    Ask questions, research topics, get up-to-date information powered by Perplexity AI.
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap justify-center gap-2 max-w-sm">
+                                {["Latest AI news", "How does TypeScript work?", "Best productivity tips"].map((hint) => (
+                                    <button
+                                        key={hint}
+                                        onClick={() => { setQuery(hint); handleSearch(hint); }}
+                                        className="text-xs bg-muted hover:bg-accent px-3 py-1.5 rounded-full transition-colors"
+                                    >
+                                        {hint}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     )}
                 </div>

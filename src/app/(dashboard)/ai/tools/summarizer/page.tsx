@@ -228,9 +228,14 @@ export default function SummarizerPage() {
                                 ) : output ? (
                                     <p className="whitespace-pre-wrap">{output}</p>
                                 ) : (
-                                    <div className="text-center space-y-2">
-                                        <FileText className="h-8 w-8 mx-auto opacity-20" />
-                                        <p className="text-xs">Your result will appear here</p>
+                                    <div className="text-center space-y-3">
+                                        <div className="relative inline-block">
+                                            <div className="absolute inset-0 rounded-full bg-orange-500/10 scale-[2] animate-pulse" />
+                                            <div className="relative w-12 h-12 rounded-full bg-orange-500/10 flex items-center justify-center mx-auto">
+                                                <FileText className="h-6 w-6 text-orange-500/60" />
+                                            </div>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">Your result will appear here</p>
                                     </div>
                                 )}
                             </div>

@@ -175,9 +175,9 @@ export default function AiChatPage() {
     };
 
     return (
-        <div className="flex h-full overflow-hidden bg-white dark:bg-slate-950 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800">
+        <div className="flex h-full overflow-hidden bg-card border-border rounded-xl shadow-2xl border">
             {/* Session Sidebar — Desktop */}
-            <aside className="hidden md:block w-72 shrink-0 h-full border-r border-slate-200 dark:border-slate-800">
+            <aside className="hidden md:block w-72 shrink-0 h-full border-r border-border">
                 <ChatSidebar
                     activeSessionId={activeSessionId || undefined}
                     onSessionSelect={(id) => setActiveSessionId(id)}
@@ -186,9 +186,9 @@ export default function AiChatPage() {
             </aside>
 
             {/* Main Chat Area */}
-            <main className="flex-1 flex flex-col h-full bg-slate-50/50 dark:bg-slate-900/50 relative overflow-hidden">
+            <main className="flex-1 flex flex-col h-full bg-muted/20 relative overflow-hidden">
                 {/* Header */}
-                <header className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/80 backdrop-blur-md sticky top-0 z-10 shrink-0">
+                <header className="flex items-center justify-between p-4 border-b border-border bg-card/80 backdrop-blur-md sticky top-0 z-10 shrink-0">
                     <div className="flex items-center gap-3">
                         {/* Mobile session drawer */}
                         <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
@@ -214,7 +214,7 @@ export default function AiChatPage() {
                                 <Sparkles className="h-3.5 w-3.5 text-blue-500" />
                                 AI Chat
                             </h2>
-                            <p className="text-[10px] text-slate-500 font-medium tracking-tight">
+                            <p className="text-[10px] text-muted-foreground font-medium tracking-tight">
                                 Context-Aware · Powered by Gemini
                             </p>
                         </div>
@@ -227,14 +227,14 @@ export default function AiChatPage() {
                             onModelChange={setSelectedModel as any}
                             availableModels={availableModels}
                         />
-                        <div className="hidden sm:block h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
+                        <div className="hidden sm:block h-4 w-px bg-border mx-1" />
                         {/* MCP Tools Button */}
                         <Sheet open={mcpPanelOpen} onOpenChange={setMcpPanelOpen}>
                             <SheetTrigger asChild>
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="h-8 gap-1.5 text-xs text-slate-500 hover:text-primary"
+                                    className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-primary"
                                     title="MCP Tools"
                                 >
                                     <Plug className="h-3.5 w-3.5" />
@@ -281,7 +281,7 @@ export default function AiChatPage() {
                     className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 scroll-smooth"
                 >
                     {isInitialLoading ? (
-                        <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-400">
+                        <div className="flex flex-col items-center justify-center h-full gap-4 text-muted-foreground">
                             <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
                             <p className="text-sm font-medium">Loading assistant...</p>
                         </div>
@@ -291,11 +291,11 @@ export default function AiChatPage() {
                 </div>
 
                 {/* Input */}
-                <div className="p-4 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 safe-area-bottom shrink-0">
+                <div className="p-4 bg-card border-t border-border safe-area-bottom shrink-0">
                     {webSearchMode && (
                         <div className="flex items-center gap-1.5 mb-2">
-                            <Badge variant="secondary" className="text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
-                                🌐 Web Search Active
+                            <Badge variant="secondary" className="text-[10px] bg-violet-500/10 text-violet-500 border border-violet-500/20">
+                                Web Search Active
                             </Badge>
                         </div>
                     )}
@@ -310,10 +310,10 @@ export default function AiChatPage() {
                             onChange={(e) => setInput(e.target.value)}
                             disabled={isLoading}
                             className={cn(
-                                "w-full pr-24 h-12 rounded-2xl focus-visible:ring-2 transition-all shadow-inner border-none",
+                                "w-full pr-24 h-12 rounded-2xl focus-visible:ring-2 transition-all border-none",
                                 webSearchMode
-                                    ? "bg-violet-50 dark:bg-violet-950/30 focus-visible:ring-violet-500"
-                                    : "bg-slate-100 dark:bg-slate-900 focus-visible:ring-blue-500"
+                                    ? "bg-violet-500/10 focus-visible:ring-violet-500"
+                                    : "bg-muted focus-visible:ring-primary"
                             )}
                             onKeyDown={(e) => {
                                 if (e.key === "Enter" && !e.shiftKey) {
@@ -331,8 +331,8 @@ export default function AiChatPage() {
                                 className={cn(
                                     "h-8 w-8 rounded-full transition-colors",
                                     webSearchMode
-                                        ? "text-violet-600 bg-violet-100 dark:bg-violet-900/30 hover:bg-violet-200"
-                                        : "text-slate-400 hover:text-violet-500"
+                                        ? "text-violet-500 bg-violet-500/10 hover:bg-violet-500/20"
+                                        : "text-muted-foreground hover:text-violet-500"
                                 )}
                                 title={webSearchMode ? "Web search ON" : "Enable web search"}
                             >
@@ -341,7 +341,7 @@ export default function AiChatPage() {
                             <Button
                                 type="submit"
                                 disabled={!input.trim() || isLoading}
-                                className="h-8 px-3 gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20"
+                                className="h-8 px-3 gap-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-md shadow-primary/20"
                             >
                                 {isLoading ? (
                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -352,9 +352,9 @@ export default function AiChatPage() {
                             </Button>
                         </div>
                     </form>
-                    <p className="text-[10px] text-center text-slate-400 mt-3 font-medium">
+                    <p className="text-[10px] text-center text-muted-foreground mt-3 font-medium">
                         {webSearchMode
-                            ? "🌐 Web search enabled — results powered by Perplexity"
+                            ? "Web search enabled — results powered by Perplexity"
                             : 'Tips: "How much did I spend in Feb?" or "Log a healthy snack"'}
                     </p>
                 </div>

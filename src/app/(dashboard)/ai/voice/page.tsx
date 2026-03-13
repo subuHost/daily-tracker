@@ -193,7 +193,7 @@ export default function VoicePage() {
             </aside>
 
             {/* Voice Chat Main */}
-            <main className="flex-1 flex flex-col overflow-hidden bg-gradient-to-b from-background to-muted/20">
+            <main className="flex-1 flex flex-col overflow-hidden bg-gradient-to-b from-background via-background to-rose-500/5">
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
                     <div>
@@ -233,12 +233,19 @@ export default function VoicePage() {
                 {/* Conversation History */}
                 <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
                     {conversation.length === 0 && (
-                        <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground gap-3 pb-24">
-                            <Mic className="h-10 w-10 opacity-20" />
-                            <p className="text-sm font-medium">Start a voice conversation</p>
-                            <p className="text-xs max-w-xs">
-                                Tap the microphone button below and speak. The AI will respond both in text and voice.
-                            </p>
+                        <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground gap-4 pb-24">
+                            <div className="relative">
+                                <div className="absolute inset-0 rounded-full bg-rose-500/10 scale-[2.5] animate-pulse" />
+                                <div className="relative w-14 h-14 rounded-full bg-rose-500/10 flex items-center justify-center">
+                                    <Mic className="h-7 w-7 text-rose-500/60" />
+                                </div>
+                            </div>
+                            <div>
+                                <p className="text-sm font-semibold">Start a voice conversation</p>
+                                <p className="text-xs mt-1 max-w-xs text-muted-foreground">
+                                    Tap the microphone below and speak. AI responds in text and voice.
+                                </p>
+                            </div>
                         </div>
                     )}
                     {conversation.map((msg, i) => (
@@ -281,23 +288,35 @@ export default function VoicePage() {
                 </div>
 
                 {/* Mic Control Area */}
-                <div className="shrink-0 flex flex-col items-center gap-4 pb-8 pt-4 border-t bg-card/50 backdrop-blur-sm">
+                <div className="shrink-0 flex flex-col items-center gap-3 pb-8 pt-5 border-t bg-card/60 backdrop-blur-sm">
                     {/* Waveform animation */}
-                    {isListening && (
-                        <div className="flex items-end gap-1 h-8">
-                            {[1, 2, 3, 4, 5].map((i) => (
+                    <div className="h-8 flex items-end gap-1">
+                        {isListening ? (
+                            [1, 2, 3, 4, 5].map((i) => (
                                 <div
                                     key={i}
-                                    className="w-1.5 bg-primary rounded-full"
+                                    className="w-1.5 bg-rose-500 rounded-full"
                                     style={{
                                         animation: `voiceWave 0.8s ease-in-out infinite alternate`,
                                         animationDelay: `${i * 0.1}s`,
                                         height: `${12 + i * 4}px`,
                                     }}
                                 />
-                            ))}
-                        </div>
-                    )}
+                            ))
+                        ) : isSpeaking ? (
+                            [1, 2, 3, 4, 5].map((i) => (
+                                <div
+                                    key={i}
+                                    className="w-1.5 bg-primary rounded-full"
+                                    style={{
+                                        animation: `voiceWave 0.6s ease-in-out infinite alternate`,
+                                        animationDelay: `${i * 0.08}s`,
+                                        height: `${8 + i * 5}px`,
+                                    }}
+                                />
+                            ))
+                        ) : null}
+                    </div>
 
                     <p className="text-xs text-muted-foreground font-medium">{statusText}</p>
 
@@ -320,12 +339,12 @@ export default function VoicePage() {
                             onClick={handleMicClick}
                             disabled={isProcessing}
                             className={cn(
-                                "relative flex items-center justify-center w-20 h-20 rounded-full transition-all duration-200 shadow-lg",
+                                "relative flex items-center justify-center w-20 h-20 rounded-full transition-all duration-200 shadow-xl",
                                 isListening
-                                    ? "bg-red-500 text-white scale-110 shadow-red-500/40"
+                                    ? "bg-rose-500 text-white scale-110 shadow-rose-500/40"
                                     : isProcessing
                                     ? "bg-muted text-muted-foreground cursor-not-allowed"
-                                    : "bg-primary text-primary-foreground hover:scale-105 hover:shadow-primary/40"
+                                    : "bg-primary text-primary-foreground hover:scale-105 shadow-primary/30 hover:shadow-primary/50"
                             )}
                         >
                             {isProcessing ? (
@@ -344,7 +363,10 @@ export default function VoicePage() {
                                 <Mic className="h-8 w-8" />
                             )}
                             {isListening && (
-                                <span className="absolute inset-0 rounded-full bg-red-500 animate-ping opacity-30" />
+                                <span className="absolute inset-0 rounded-full bg-rose-500 animate-ping opacity-30" />
+                            )}
+                            {!isListening && !isProcessing && (
+                                <span className="absolute inset-0 rounded-full bg-primary animate-pulse-ring opacity-0" />
                             )}
                         </button>
                     </div>

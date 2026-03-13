@@ -40,12 +40,18 @@ const PRESETS = [
         server_url: "https://mcp.context7.com/mcp",
         transport: "http" as const,
         description: "Up-to-date library & framework documentation",
+        color: "text-teal-500",
+        bg: "bg-teal-500/10",
+        border: "border-teal-500/20",
     },
     {
         name: "Apify",
         server_url: "https://mcp.apify.com/mcp",
         transport: "http" as const,
         description: "Web scraping & automation tools",
+        color: "text-orange-500",
+        bg: "bg-orange-500/10",
+        border: "border-orange-500/20",
     },
 ];
 
@@ -208,16 +214,24 @@ export default function McpPage() {
                                 return (
                                     <div
                                         key={preset.name}
-                                        className="flex items-center justify-between p-4 rounded-xl border bg-card gap-3"
+                                        className={cn(
+                                            "flex items-center justify-between p-4 rounded-xl border bg-card gap-3 transition-all",
+                                            !isAdded && "hover:border-border/80"
+                                        )}
                                     >
-                                        <div>
-                                            <p className="text-sm font-medium">{preset.name}</p>
-                                            <p className="text-xs text-muted-foreground mt-0.5">{preset.description}</p>
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", preset.bg, preset.border, "border")}>
+                                                <Plug className={cn("h-4 w-4", preset.color)} />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-medium">{preset.name}</p>
+                                                <p className="text-xs text-muted-foreground truncate">{preset.description}</p>
+                                            </div>
                                         </div>
                                         <Button
                                             size="sm"
                                             variant={isAdded ? "secondary" : "outline"}
-                                            className="h-8 shrink-0 text-xs"
+                                            className={cn("h-8 shrink-0 text-xs", !isAdded && cn(preset.color, "border", preset.border, preset.bg, "hover:opacity-80"))}
                                             onClick={() => handleAddPreset(preset)}
                                             disabled={isAdded}
                                         >
