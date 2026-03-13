@@ -18,7 +18,7 @@ import {
     StickyNote,
     Activity,
     GraduationCap,
-    MessageCircle,
+    Brain,
     Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -37,7 +37,7 @@ const navigation = [
     { name: "Journal", href: "/journal", icon: BookOpen },
     { name: "Habits", href: "/habits", icon: Target },
     { name: "Calendar", href: "/calendar", icon: Calendar },
-    { name: "Assistant", href: "/chat", icon: MessageCircle },
+    { name: "AI Hub", href: "/ai", icon: Brain },
     { name: "Contacts", href: "/contacts", icon: Users },
     { name: "Gallery", href: "/gallery", icon: Image },
     { name: "Notepad", href: "/notepad", icon: StickyNote },

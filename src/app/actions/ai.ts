@@ -1290,3 +1290,143 @@ export async function webSearchAction(query: string): Promise<{ content: string;
         return { content: `Web search failed: ${(error as Error).message}`, citations: [] };
     }
 }
+
+// ─── Voice Chat Action ─────────────────────────────────────────────────────
+
+export interface VoiceMessage {
+    role: "user" | "assistant";
+    content: string;
+}
+
+/**
+ * Voice chat — short conversational responses for voice assistant.
+ * No markdown, plain text only, 2-4 sentences max.
+ */
+export async function voiceChatAction(
+    text: string,
+    history: VoiceMessage[]
+): Promise<string> {
+    const genAI = getGeminiClient();
+    if (!genAI) throw new Error("Gemini not configured");
+
+    const model = genAI.getGenerativeModel({
+        model: "gemini-flash-latest",
+        generationConfig: { temperature: 0.7 },
+    });
+
+    const SYSTEM = "You are a helpful voice assistant. Keep responses concise and conversational (2-4 sentences max). Use plain text only — no markdown, no bullet points, no lists. Speak naturally.";
+
+    const chatHistory = [
+        { role: "user" as const, parts: [{ text: `System: ${SYSTEM}` }] },
+        { role: "model" as const, parts: [{ text: "Understood, I will keep my answers short and conversational." }] },
+        ...history.slice(-8).map((m) => ({
+            role: m.role === "user" ? ("user" as const) : ("model" as const),
+            parts: [{ text: m.content }],
+        })),
+    ];
+
+    const chat = model.startChat({ history: chatHistory });
+    const result = await chat.sendMessage(text);
+    return result.response.text();
+}
+
+// ─── Web Search Tool Action ────────────────────────────────────────────────
+
+/**
+ * General-purpose web search tool for the AI Hub search page.
+ * Supports model selection (sonar / sonar-pro / sonar-reasoning).
+ */
+export async function webSearchToolAction(
+    query: string,
+    model: "sonar" | "sonar-pro" | "sonar-reasoning" = "sonar"
+): Promise<{ content: string; citations: string[]; query: string }> {
+    const { getUserAiSettingsServer } = await import("@/lib/db/user-settings.server");
+    const settings = await getUserAiSettingsServer().catch(() => null);
+
+    if (!settings?.perplexity_api_key) {
+        const genAI = getGeminiClient();
+        if (!genAI) return { content: "No AI keys configured. Add a Perplexity or Gemini API key in Settings.", citations: [], query };
+
+        try {
+            const geminiModel = genAI.getGenerativeModel({
+                model: "gemini-flash-latest",
+                generationConfig: { temperature: 0.3 },
+            });
+            const result = await geminiModel.generateContent(
+                `Answer the following query with the most accurate and up-to-date information you have. Use markdown formatting with headers and bullet points where helpful.\n\nQuery: ${query}`
+            );
+            return { content: result.response.text(), citations: [], query };
+        } catch (error) {
+            return { content: `Search failed: ${(error as Error).message}`, citations: [], query };
+        }
+    }
+
+    try {
+        const OpenAI = (await import("openai")).default;
+        const client = new OpenAI({
+            apiKey: settings.perplexity_api_key,
+            baseURL: "https://api.perplexity.ai",
+        });
+
+        const response = await client.chat.completions.create({
+            model,
+            messages: [
+                {
+                    role: "system",
+                    content:
+                        "You are a helpful research assistant. Provide detailed, factual, well-structured answers. Use markdown formatting with headers and bullet points where appropriate.",
+                },
+                { role: "user", content: query },
+            ],
+            temperature: 0.2,
+        } as any);
+
+        const content = response.choices[0]?.message?.content || "";
+        const citations: string[] = (response as any).citations || [];
+        return { content, citations, query };
+    } catch (error) {
+        return { content: `Web search failed: ${(error as Error).message}`, citations: [], query };
+    }
+}
+
+// ─── Text Tool Action ──────────────────────────────────────────────────────
+
+type TextToolMode = "summarize" | "rewrite" | "translate" | "expand";
+type TextToolLength = "short" | "medium" | "detailed";
+
+/**
+ * AI text transformation tool — summarize, rewrite, translate, or expand text.
+ */
+export async function textToolAction(
+    text: string,
+    mode: TextToolMode,
+    options: { length?: TextToolLength; targetLanguage?: string } = {}
+): Promise<{ result: string; wordCount: number }> {
+    const genAI = getGeminiClient();
+    if (!genAI) throw new Error("Gemini not configured");
+
+    const length = options.length || "medium";
+    const lengthMap: Record<TextToolLength, string> = {
+        short: "100-150 words",
+        medium: "200-300 words",
+        detailed: "400-600 words",
+    };
+
+    const prompts: Record<TextToolMode, string> = {
+        summarize: `Summarize the following text in approximately ${lengthMap[length]}. Be concise and capture all key points:\n\n${text}`,
+        rewrite: `Rewrite the following text to be clearer, more engaging, and better structured. Target length: ${lengthMap[length]}. Preserve the original meaning:\n\n${text}`,
+        translate: `Translate the following text to ${options.targetLanguage || "Spanish"}. Maintain the original tone, style, and formatting:\n\n${text}`,
+        expand: `Expand and elaborate on the following text to approximately ${lengthMap[length === "short" ? "medium" : "detailed"]}. Add relevant context, examples, and details:\n\n${text}`,
+    };
+
+    const geminiModel = genAI.getGenerativeModel({
+        model: "gemini-flash-latest",
+        generationConfig: { temperature: mode === "rewrite" ? 0.7 : 0.3 },
+    });
+
+    const result = await geminiModel.generateContent(prompts[mode]);
+    const output = result.response.text();
+    const wordCount = output.split(/\s+/).filter(Boolean).length;
+
+    return { result: output, wordCount };
+}

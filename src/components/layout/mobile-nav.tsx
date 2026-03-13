@@ -9,7 +9,7 @@ import {
     CheckSquare,
     Activity,
     MoreHorizontal,
-    MessageCircle,
+    Brain,
     StickyNote,
     Target,
     GraduationCap,
@@ -28,7 +28,7 @@ import { MoreDrawer } from "./more-drawer";
 const primaryNavigation = [
     { name: "Home", href: "/dashboard", icon: LayoutDashboard },
     { name: "Finance", href: "/finance", icon: Wallet },
-    { name: "Assistant", href: "/chat", icon: MessageCircle },
+    { name: "AI Hub", href: "/ai", icon: Brain },
     { name: "Tasks", href: "/tasks", icon: CheckSquare },
     { name: "Alerts", href: "/notifications", icon: Bell },
 ];
