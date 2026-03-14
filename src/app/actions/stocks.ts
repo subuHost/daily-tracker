@@ -8,8 +8,20 @@ import { createPerplexityClient, perplexitySearch } from "@/lib/ai/perplexity-cl
 // ─── Exchange Detection Helpers ─────────────────────────────────
 
 const KNOWN_NSE_SYMBOLS = new Set([
+    // Nifty 50 + popular NSE stocks
     'RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'HINDUNILVR', 'BHARTIARTL', 'ITC',
-    'KOTAKBANK', 'LT', 'AXISBANK', 'SBIN', 'ASIANPAINT', 'BAJFINANCE', 'MARUTI', 'HCLTECH'
+    'KOTAKBANK', 'LT', 'AXISBANK', 'SBIN', 'ASIANPAINT', 'BAJFINANCE', 'MARUTI', 'HCLTECH',
+    'TATAMOTORS', 'WIPRO', 'SUNPHARMA', 'TITAN', 'ULTRACEMCO', 'NESTLEIND', 'TECHM', 'POWERGRID',
+    'NTPC', 'ONGC', 'ADANIENT', 'ADANIPORTS', 'COALINDIA', 'JSWSTEEL', 'TATASTEEL', 'HINDALCO',
+    'DRREDDY', 'CIPLA', 'DIVISLAB', 'EICHERMOT', 'BAJAJFINSV', 'INDUSINDBK', 'BPCL', 'GRASIM',
+    'APOLLOHOSP', 'HEROMOTOCO', 'BRITANNIA', 'TATACONSUM', 'M&M', 'HDFCLIFE', 'SBILIFE', 'UPL',
+    'VEDL', 'IOC', 'GAIL', 'PNB', 'BANKBARODA', 'CANBK', 'IRCTC', 'ZOMATO', 'PAYTM',
+    'NYKAA', 'DELHIVERY', 'POLICYBZR', 'LICI', 'HAL', 'BEL', 'BHEL', 'SAIL', 'NHPC',
+    'TATAPOWER', 'ADANIGREEN', 'ADANIPOWER', 'JINDALSTEL', 'PIDILITIND', 'DABUR', 'GODREJCP',
+    'MARICO', 'COLPAL', 'HAVELLS', 'VOLTAS', 'PAGEIND', 'MUTHOOTFIN', 'BAJAJ-AUTO',
+    'BERGEPAINT', 'SIEMENS', 'ABB', 'TORNTPHARM', 'AUBANK', 'BANDHANBNK', 'IDFCFIRSTB',
+    'FEDERALBNK', 'RBLBANK', 'YESBANK', 'IDEA', 'TATAELXSI', 'PERSISTENT', 'LTIM', 'COFORGE',
+    'MPHASIS', 'MINDTREE', 'HAPPSTMNDS', 'NAUKRI', 'ZEEL', 'PVR', 'INOXLEISUR',
 ]);
 
 function detectExchange(symbol: string): 'NSE' | 'BSE' | 'US' {
@@ -17,6 +29,8 @@ function detectExchange(symbol: string): 'NSE' | 'BSE' | 'US' {
     if (s.endsWith('.NS')) return 'NSE';
     if (s.endsWith('.BO')) return 'BSE';
     if (KNOWN_NSE_SYMBOLS.has(s)) return 'NSE';
+    // If no Finnhub key configured, default to NSE for unknown symbols
+    if (!process.env.FINNHUB_API_KEY) return 'NSE';
     return 'US';
 }
 
@@ -28,46 +42,95 @@ function ensureExchangeSuffix(symbol: string, exchange: 'NSE' | 'BSE'): string {
 
 // ─── Yahoo Finance API ──────────────────────────────────────────
 
+const YAHOO_USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+];
+
+function getRandomUA(): string {
+    return YAHOO_USER_AGENTS[Math.floor(Math.random() * YAHOO_USER_AGENTS.length)];
+}
+
+/**
+ * Parse Yahoo Finance quote data into a StockQuote.
+ */
+function parseYahooQuoteData(meta: any, originalSymbol: string): StockQuote | null {
+    const current = meta.regularMarketPrice;
+    if (!current || current === 0) return null;
+    const previousClose = meta.chartPreviousClose || meta.previousClose || current;
+    return {
+        symbol: originalSymbol,
+        current,
+        high: meta.regularMarketDayHigh || current,
+        low: meta.regularMarketDayLow || current,
+        open: meta.regularMarketOpen || current,
+        previousClose,
+        change: current - previousClose,
+        changePercent: previousClose ? ((current - previousClose) / previousClose) * 100 : 0,
+        timestamp: meta.regularMarketTime || Math.floor(Date.now() / 1000),
+    };
+}
+
 /**
  * Fetch a quote from Yahoo Finance (for Indian stocks).
+ * Tries v8 chart API first, falls back to v6 quote API on failure.
  */
 async function fetchYahooQuote(yahooSymbol: string, originalSymbol: string): Promise<StockQuote | null> {
+    // Attempt 1: v8 chart endpoint
     try {
         const res = await fetch(
             `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}`,
             {
                 next: { revalidate: 30 },
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                }
+                headers: { 'User-Agent': getRandomUA() }
             }
         );
 
-        if (!res.ok) return null;
-
-        const data = await res.json();
-        const result = data.chart?.result?.[0];
-        if (!result || !result.meta) return null;
-
-        const meta = result.meta;
-        const current = meta.regularMarketPrice;
-        const previousClose = meta.chartPreviousClose || meta.previousClose;
-
-        return {
-            symbol: originalSymbol,
-            current,
-            high: meta.regularMarketDayHigh,
-            low: meta.regularMarketDayLow,
-            open: meta.regularMarketOpen,
-            previousClose,
-            change: current - previousClose,
-            changePercent: ((current - previousClose) / previousClose) * 100,
-            timestamp: meta.regularMarketTime,
-        };
+        if (res.ok) {
+            const data = await res.json();
+            const result = data.chart?.result?.[0];
+            if (result?.meta) {
+                const quote = parseYahooQuoteData(result.meta, originalSymbol);
+                if (quote) return quote;
+            }
+        }
     } catch (error) {
-        console.error(`Yahoo quote error for ${yahooSymbol}:`, error);
-        return null;
+        console.error(`Yahoo v8 error for ${yahooSymbol}:`, error);
     }
+
+    // Attempt 2: v6 quote endpoint (fallback)
+    try {
+        const res = await fetch(
+            `https://query2.finance.yahoo.com/v6/finance/quote?symbols=${encodeURIComponent(yahooSymbol)}`,
+            {
+                next: { revalidate: 30 },
+                headers: { 'User-Agent': getRandomUA() }
+            }
+        );
+
+        if (res.ok) {
+            const data = await res.json();
+            const q = data.quoteResponse?.result?.[0];
+            if (q) {
+                return {
+                    symbol: originalSymbol,
+                    current: q.regularMarketPrice || 0,
+                    high: q.regularMarketDayHigh || 0,
+                    low: q.regularMarketDayLow || 0,
+                    open: q.regularMarketOpen || 0,
+                    previousClose: q.regularMarketPreviousClose || 0,
+                    change: q.regularMarketChange || 0,
+                    changePercent: q.regularMarketChangePercent || 0,
+                    timestamp: q.regularMarketTime || Math.floor(Date.now() / 1000),
+                };
+            }
+        }
+    } catch (error) {
+        console.error(`Yahoo v6 fallback error for ${yahooSymbol}:`, error);
+    }
+
+    return null;
 }
 
 /**
@@ -459,6 +522,126 @@ Respond in JSON format with this exact structure:
             keyPoints: ["Research report generation failed. Please try again later."],
             risks: [],
             catalysts: [],
+            citations: [],
+            provider: "none",
+        };
+    }
+}
+
+// ─── Watchlist Briefing ─────────────────────────────────────────
+
+export interface WatchlistStockBrief {
+    symbol: string;
+    name: string;
+    sentiment: "bullish" | "bearish" | "neutral";
+    summary: string;
+    keyChange: string;
+}
+
+export interface WatchlistBriefing {
+    marketOverview: string;
+    stocks: WatchlistStockBrief[];
+    alerts: string[];
+    generatedAt: string;
+    citations: string[];
+    provider: string;
+}
+
+/**
+ * Generate a daily AI briefing for the user's watchlist stocks.
+ *
+ * Pipeline:
+ * 1. Perplexity: batch search for all watchlist stocks' recent news
+ * 2. Gemini/GPT: synthesize a morning briefing with per-stock summaries
+ *
+ * Returns structured briefing with market overview + per-stock cards.
+ */
+export async function generateWatchlistBriefing(
+    stocks: { symbol: string; name: string }[],
+    modelId?: string
+): Promise<WatchlistBriefing> {
+    if (stocks.length === 0) {
+        return {
+            marketOverview: "No stocks in your watchlist. Add some stocks to get a daily briefing.",
+            stocks: [],
+            alerts: [],
+            generatedAt: new Date().toISOString(),
+            citations: [],
+            provider: "none",
+        };
+    }
+
+    const settings = await getUserAiSettingsServer().catch(() => null);
+    const { ModelRouter } = await import("@/lib/ai/model-router");
+    const config = ModelRouter.resolveConfig(modelId ?? settings?.preferred_model ?? "gemini-flash", settings);
+
+    let newsContent = "";
+    let citations: string[] = [];
+
+    // Step 1: Perplexity for batch news search
+    const stockList = stocks.map(s => `${s.name} (${s.symbol})`).join(", ");
+
+    if (settings?.perplexity_api_key) {
+        try {
+            const perplexity = createPerplexityClient(settings.perplexity_api_key);
+            const result = await perplexitySearch(
+                perplexity,
+                `Give me a concise market briefing for these Indian stocks: ${stockList}. For each stock, include: latest price movement, any recent news, earnings updates, analyst sentiment, and any significant changes. Also include an overall Indian market summary (Nifty 50, Sensex). Focus on actionable information.`,
+                { model: "sonar-pro" }
+            );
+            newsContent = result.content;
+            citations = result.citations;
+        } catch (error) {
+            console.error("Perplexity briefing search failed:", error);
+        }
+    }
+
+    // Step 2: Synthesize briefing via AI
+    const prompt = `You are a professional financial analyst creating a morning market briefing for an Indian investor.
+
+Watchlist stocks: ${stockList}
+
+${newsContent ? `Latest Market Data & News:\n${newsContent}` : "No fresh news data available. Use your general market knowledge for Indian stocks."}
+
+Create a structured briefing. Respond ONLY with valid JSON in this exact format:
+{
+  "marketOverview": "2-3 sentences about today's Indian market conditions (Nifty, Sensex, global cues)",
+  "stocks": [
+    {
+      "symbol": "SYMBOL",
+      "name": "Company Name",
+      "sentiment": "bullish" | "bearish" | "neutral",
+      "summary": "1-2 sentences about this stock's current situation",
+      "keyChange": "Most important recent development (e.g., '+3.2% on strong earnings' or 'Down 1.5% on sector weakness')"
+    }
+  ],
+  "alerts": ["Any urgent alerts like earnings dates, significant price moves, or news that needs attention"]
+}
+
+Include ALL ${stocks.length} stocks from the watchlist. Be concise but actionable.`;
+
+    try {
+        const systemPrompt = "You are a senior Indian market analyst at a top brokerage. Provide crisp, data-driven briefings. Always respond ONLY with valid JSON.";
+        const responseText = await ModelRouter.chat(config, [{ role: "user", content: prompt }], systemPrompt);
+
+        const cleanJson = responseText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+        const parsed = JSON.parse(cleanJson);
+
+        return {
+            marketOverview: parsed.marketOverview || "Market data unavailable.",
+            stocks: parsed.stocks || [],
+            alerts: parsed.alerts || [],
+            generatedAt: new Date().toISOString(),
+            citations,
+            provider: config.provider,
+        };
+    } catch (error) {
+        console.error("Watchlist briefing generation failed:", error);
+        return {
+            marketOverview: `Failed to generate briefing: ${(error as Error).message}. Check AI API key configuration.`,
+            stocks: [],
+            alerts: [],
+            generatedAt: new Date().toISOString(),
             citations: [],
             provider: "none",
         };
