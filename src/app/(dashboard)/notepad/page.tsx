@@ -16,6 +16,7 @@ import {
 import { getNotes, createNote, updateNote, deleteNote, type Note } from "@/lib/db";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
+import { ImageUploadButton, ImageThumbnails } from "@/components/ui/image-upload-button";
 
 export default function NotepadPage() {
     const [notes, setNotes] = useState<Note[]>([]);
@@ -27,6 +28,7 @@ export default function NotepadPage() {
     // Form state
     const [title, setTitle] = useState("");
     const [content, setContent] = useState("");
+    const [images, setImages] = useState<string[]>([]);
 
     useEffect(() => {
         loadNotes();
@@ -58,6 +60,7 @@ export default function NotepadPage() {
         setSelectedNote(null);
         setTitle("");
         setContent("");
+        setImages([]);
         setIsEditing(true);
         scrollToEditor();
     };
@@ -66,6 +69,7 @@ export default function NotepadPage() {
         setSelectedNote(note);
         setTitle(note.title || "");
         setContent(note.content);
+        setImages(note.images || []);
         setIsEditing(true);
         scrollToEditor();
     };
@@ -80,13 +84,13 @@ export default function NotepadPage() {
         try {
             if (selectedNote) {
                 // Update existing note
-                const updated = await updateNote(selectedNote.id, { title, content });
+                const updated = await updateNote(selectedNote.id, { title, content, images });
                 setNotes(notes.map(n => n.id === updated.id ? updated : n));
                 setSelectedNote(updated);
                 toast.success("Note updated");
             } else {
                 // Create new note
-                const created = await createNote({ title, content });
+                const created = await createNote({ title, content, images });
                 setNotes([created, ...notes]);
                 setSelectedNote(created);
                 toast.success("Note created");
@@ -110,6 +114,7 @@ export default function NotepadPage() {
             setSelectedNote(null);
             setTitle("");
             setContent("");
+            setImages([]);
             setIsEditing(false);
             toast.success("Note deleted");
         } catch (error) {
@@ -124,6 +129,7 @@ export default function NotepadPage() {
         setSelectedNote(null);
         setTitle("");
         setContent("");
+        setImages([]);
         setIsEditing(false);
     };
 
@@ -211,7 +217,18 @@ export default function NotepadPage() {
                                     onChange={(e) => setContent(e.target.value)}
                                     className="min-h-[300px] resize-none"
                                 />
-                                <div className="flex gap-2 justify-end">
+                                <ImageThumbnails
+                                    images={images}
+                                    onRemove={(url) => setImages(images.filter(u => u !== url))}
+                                />
+                                <div className="flex items-center gap-2 justify-between">
+                                    <ImageUploadButton
+                                        onUploadComplete={(url) => setImages([...images, url])}
+                                        tags={["notepad"]}
+                                        label="Add Image"
+                                        disabled={isSaving}
+                                    />
+                                    <div className="flex gap-2">
                                     <Button variant="ghost" onClick={handleCancel} disabled={isSaving}>
                                         <X className="mr-2 h-4 w-4" />
                                         Cancel
@@ -230,6 +247,7 @@ export default function NotepadPage() {
                                         )}
                                         Save
                                     </Button>
+                                    </div>
                                 </div>
                             </div>
                         ) : (

@@ -5,6 +5,7 @@ export interface Note {
     user_id: string;
     title: string | null;
     content: string;
+    images: string[] | null;
     created_at: string;
     updated_at: string;
 }
@@ -12,6 +13,7 @@ export interface Note {
 export interface NoteInput {
     title?: string | null;
     content: string;
+    images?: string[] | null;
 }
 
 // Fetch all notes
@@ -42,6 +44,7 @@ export async function createNote(input: NoteInput): Promise<Note> {
             user_id: user.id,
             title: input.title || null,
             content: input.content,
+            images: input.images || null,
         })
         .select()
         .single();
@@ -61,6 +64,7 @@ export async function updateNote(id: string, input: NoteInput): Promise<Note> {
         .update({
             title: input.title || null,
             content: input.content,
+            images: input.images || null,
             updated_at: new Date().toISOString(),
         })
         .eq("id", id)

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Activity, Flame, GlassWater, Moon, Scale, Plus, Utensils, Sparkles } from "lucide-react";
+import { ImageUploadButton, ImageThumbnails } from "@/components/ui/image-upload-button";
 import {
     getFoodLogs,
     getHealthMetrics,
@@ -131,7 +132,8 @@ export default function HealthPage() {
         protein: "",
         carbs: "",
         fats: "",
-        meal_type: "snack"
+        meal_type: "snack",
+        image_url: ""
     });
 
     const handleManualFoodLog = async () => {
@@ -149,7 +151,8 @@ export default function HealthPage() {
                 protein: parseFloat(manualFood.protein) || 0,
                 carbs: parseFloat(manualFood.carbs) || 0,
                 fats: parseFloat(manualFood.fats) || 0,
-                meal_type: manualFood.meal_type
+                meal_type: manualFood.meal_type,
+                image_url: manualFood.image_url || null
             });
 
             toast.success("Food logged successfully");
@@ -160,7 +163,8 @@ export default function HealthPage() {
                 protein: "",
                 carbs: "",
                 fats: "",
-                meal_type: "snack"
+                meal_type: "snack",
+                image_url: ""
             });
             setIsFoodOpen(false);
             loadData();
@@ -290,6 +294,22 @@ export default function HealthPage() {
                                                 {type}
                                             </button>
                                         ))}
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Food Photo (optional)</Label>
+                                    <div className="flex items-center gap-3">
+                                        <ImageUploadButton
+                                            onUploadComplete={(url) => setManualFood({ ...manualFood, image_url: url })}
+                                            tags={["health", "food"]}
+                                            label="Add Photo"
+                                        />
+                                        {manualFood.image_url && (
+                                            <ImageThumbnails
+                                                images={[manualFood.image_url]}
+                                                onRemove={() => setManualFood({ ...manualFood, image_url: "" })}
+                                            />
+                                        )}
                                     </div>
                                 </div>
                                 <Button onClick={handleManualFoodLog} className="w-full">Save Food Log</Button>
