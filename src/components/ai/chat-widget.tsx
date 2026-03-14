@@ -16,6 +16,7 @@ import {
     getDailyContextAction,
     type Message,
 } from "@/app/actions/ai";
+import { compressImage } from "@/lib/utils/compress-image";
 
 interface ChatMessage extends Message {
     imagePreview?: string; // For displaying image in chat
@@ -25,52 +26,6 @@ const WELCOME_MESSAGE: ChatMessage = {
     role: "assistant",
     content: "Hi! I'm your AI health & productivity assistant. How can I help you today? You can also tap the 📷 button to log food by photo!",
 };
-
-// Compress image to reduce file size
-async function compressImage(file: File, maxWidth: number = 1024, quality: number = 0.7): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-
-        reader.onload = (event) => {
-            const img = new Image();
-            img.src = event.target?.result as string;
-
-            img.onload = () => {
-                const canvas = document.createElement("canvas");
-                let width = img.width;
-                let height = img.height;
-
-                // Scale down if larger than maxWidth
-                if (width > maxWidth) {
-                    height = (height * maxWidth) / width;
-                    width = maxWidth;
-                }
-
-                canvas.width = width;
-                canvas.height = height;
-
-                const ctx = canvas.getContext("2d");
-                if (!ctx) {
-                    reject(new Error("Failed to get canvas context"));
-                    return;
-                }
-
-                ctx.drawImage(img, 0, 0, width, height);
-
-                // Convert to JPEG with compression
-                const compressedDataUrl = canvas.toDataURL("image/jpeg", quality);
-                // Extract base64 without prefix
-                const base64 = compressedDataUrl.split(",")[1];
-                resolve(base64);
-            };
-
-            img.onerror = () => reject(new Error("Failed to load image"));
-        };
-
-        reader.onerror = () => reject(new Error("Failed to read file"));
-    });
-}
 
 export function ChatWidget() {
     const [isOpen, setIsOpen] = useState(false);

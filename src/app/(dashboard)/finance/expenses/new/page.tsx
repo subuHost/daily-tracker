@@ -9,6 +9,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { CalendarIcon, ChevronLeft, Loader2, Sparkles } from "lucide-react";
+import { ImageUploadButton, ImageThumbnails } from "@/components/ui/image-upload-button";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +48,7 @@ export default function NewExpensePage() {
     const [loadingCategories, setLoadingCategories] = useState(true);
     const [isSuggesting, setIsSuggesting] = useState(false);
     const [hasAiSuggestion, setHasAiSuggestion] = useState(false);
+    const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
 
     const {
         register,
@@ -93,6 +95,7 @@ export default function NewExpensePage() {
                 category_id: data.category,
                 date: data.date,
                 note: data.note || null,
+                receipt_url: receiptUrl,
             });
             toast.success("Expense added successfully!");
             router.push("/finance/expenses");
@@ -232,6 +235,23 @@ export default function NewExpensePage() {
                                 placeholder="Add a note..."
                                 {...register("note")}
                             />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Receipt (optional)</Label>
+                            <div className="flex items-center gap-3">
+                                <ImageUploadButton
+                                    onUploadComplete={(url) => setReceiptUrl(url)}
+                                    tags={["finance", "receipt"]}
+                                    label="Attach Receipt"
+                                />
+                                {receiptUrl && (
+                                    <ImageThumbnails
+                                        images={[receiptUrl]}
+                                        onRemove={() => setReceiptUrl(null)}
+                                    />
+                                )}
+                            </div>
                         </div>
 
                         <Button type="submit" className="w-full" disabled={isLoading}>

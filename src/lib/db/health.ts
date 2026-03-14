@@ -26,6 +26,7 @@ export interface FoodLog {
     protein: number | null;
     carbs: number | null;
     fats: number | null;
+    image_url: string | null;
     created_at: string;
 }
 
@@ -55,6 +56,7 @@ export async function logFood(input: Partial<FoodLog>, supabaseClient?: any): Pr
             protein: input.protein || 0,
             carbs: input.carbs || 0,
             fats: input.fats || 0,
+            image_url: input.image_url || null,
             embedding: embedding
         })
         .select()

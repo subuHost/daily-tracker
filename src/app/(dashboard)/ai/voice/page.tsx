@@ -8,10 +8,15 @@ import { voiceChatAction, type VoiceMessage } from "@/app/actions/ai";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
+interface SpeechRecognitionEvent extends Event {
+    results: SpeechRecognitionResultList;
+    resultIndex: number;
+}
+
 declare global {
     interface Window {
-        SpeechRecognition: typeof SpeechRecognition;
-        webkitSpeechRecognition: typeof SpeechRecognition;
+        SpeechRecognition: any;
+        webkitSpeechRecognition: any;
     }
 }
 
@@ -25,7 +30,7 @@ export default function VoicePage() {
     const [autoSpeak, setAutoSpeak] = useState(true);
     const [statusText, setStatusText] = useState("Tap the mic to start");
 
-    const recognitionRef = useRef<SpeechRecognition | null>(null);
+    const recognitionRef = useRef<any>(null);
     const conversationEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {

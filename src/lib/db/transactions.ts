@@ -11,6 +11,7 @@ export interface Transaction {
     category_color?: string;
     date: string;
     note: string | null;
+    receipt_url: string | null;
     status: "verified" | "needs_review";
     created_at: string;
     updated_at: string;
@@ -23,6 +24,7 @@ export interface TransactionInput {
     category_id?: string | null;
     date: string;
     note?: string | null;
+    receipt_url?: string | null;
     status?: "verified" | "needs_review";
 }
 
@@ -138,6 +140,7 @@ export async function createTransaction(input: TransactionInput): Promise<Transa
             category_id: input.category_id || null,
             date: input.date,
             note: input.note || null,
+            receipt_url: input.receipt_url || null,
             status: input.status || "verified",
         })
         .select()

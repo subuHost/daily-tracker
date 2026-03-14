@@ -25,6 +25,7 @@ import { format, addDays, subDays } from "date-fns";
 import { toast } from "sonner";
 import { getDailyEntry, saveDailyEntry, uploadGalleryFile } from "@/lib/db";
 import Image from "next/image";
+import { ImageUploadButton } from "@/components/ui/image-upload-button";
 
 interface DailyEntry {
     date: string;
@@ -185,23 +186,6 @@ function JournalContent() {
         if (mediaRecorderRef.current && isRecording) {
             mediaRecorderRef.current.stop();
             setIsRecording(false);
-        }
-    };
-
-    const handleImageUpload = async (e: any) => {
-        if (e.target.files) {
-            const files = Array.from(e.target.files as FileList);
-            for (const file of files) {
-                try {
-                    toast.info(`Uploading ${file.name}...`);
-                    const item = await uploadGalleryFile(file, "Journal Image", ["journal"]);
-                    setEntry(prev => ({ ...prev, images: [...prev.images, item.file_url] }));
-                    toast.success("Image uploaded");
-                } catch (err: any) {
-                    console.error("Failed to upload image", err);
-                    toast.error(`Failed to upload image: ${err.message || "Unknown error"}`);
-                }
-            }
         }
     };
 
@@ -446,17 +430,16 @@ function JournalContent() {
                                     </button>
                                 </div>
                             ))}
-                            <label className="aspect-square rounded-lg border-2 border-dashed border-muted-foreground/25 flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 hover:bg-accent/50 transition-colors">
-                                <ImageIcon className="h-6 w-6 text-muted-foreground mb-1" />
-                                <span className="text-xs text-muted-foreground">Add Image</span>
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    multiple
-                                    className="hidden"
-                                    onChange={handleImageUpload}
+                            <div className="aspect-square rounded-lg border-2 border-dashed border-muted-foreground/25 flex flex-col items-center justify-center hover:border-primary/50 hover:bg-accent/50 transition-colors">
+                                <ImageUploadButton
+                                    onUploadComplete={(url) => setEntry(prev => ({ ...prev, images: [...prev.images, url] }))}
+                                    tags={["journal"]}
+                                    description="Journal Image"
+                                    variant="icon"
+                                    className="h-full w-full rounded-lg"
                                 />
-                            </label>
+                                <span className="text-xs text-muted-foreground -mt-2">Add Image</span>
+                            </div>
                         </div>
                     </div>
                 </CardContent>

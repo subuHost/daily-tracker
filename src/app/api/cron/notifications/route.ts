@@ -17,7 +17,7 @@ interface NotificationPayload {
 
 /**
  * Cron endpoint — checks notification conditions and sends push notifications.
- * Called every 15 minutes via Vercel Cron or manual trigger.
+ * Runs once daily at 8 AM UTC via Vercel Cron (Hobby plan: daily only).
  *
  * Auth: CRON_SECRET header or ?secret= query param.
  */
@@ -32,11 +32,6 @@ export async function GET(request: Request) {
 
     const supabase = await createClient();
     const now = new Date();
-    const currentHH = now.getHours().toString().padStart(2, '0');
-    const currentMM = now.getMinutes();
-    // Round to nearest 15-min window
-    const windowStart = Math.floor(currentMM / 15) * 15;
-    const timeWindow = `${currentHH}:${windowStart.toString().padStart(2, '0')}`;
     const today = now.toISOString().split('T')[0];
 
     const notifications: NotificationPayload[] = [];
@@ -51,9 +46,6 @@ export async function GET(request: Request) {
 
         if (habitUsers) {
             for (const u of habitUsers) {
-                const userTime = (u.notif_habit_time || '21:00').slice(0, 5);
-                if (!isInTimeWindow(userTime, timeWindow)) continue;
-
                 // Check if habits logged today
                 const { count } = await supabase
                     .from('habit_logs')
@@ -82,9 +74,6 @@ export async function GET(request: Request) {
 
         if (journalUsers) {
             for (const u of journalUsers) {
-                const userTime = (u.notif_journal_time || '20:00').slice(0, 5);
-                if (!isInTimeWindow(userTime, timeWindow)) continue;
-
                 const { count } = await supabase
                     .from('journal_entries')
                     .select('*', { count: 'exact', head: true })
@@ -112,9 +101,6 @@ export async function GET(request: Request) {
 
         if (financeUsers) {
             for (const u of financeUsers) {
-                const userTime = (u.notif_finance_time || '22:00').slice(0, 5);
-                if (!isInTimeWindow(userTime, timeWindow)) continue;
-
                 const { count } = await supabase
                     .from('expenses')
                     .select('*', { count: 'exact', head: true })
@@ -140,8 +126,7 @@ export async function GET(request: Request) {
             .eq('notif_bill_enabled', true)
             .eq('push_enabled', true);
 
-        if (billUsers && timeWindow === '09:00') {
-            // Check bills once daily at 9 AM
+        if (billUsers) {
             for (const u of billUsers) {
                 const { data: overdueBills } = await supabase
                     .from('bills')
@@ -171,8 +156,7 @@ export async function GET(request: Request) {
             .eq('notif_budget_enabled', true)
             .eq('push_enabled', true);
 
-        if (budgetUsers && timeWindow === '18:00') {
-            // Check budgets once daily at 6 PM
+        if (budgetUsers) {
             for (const u of budgetUsers) {
                 const { data: budgets } = await supabase
                     .from('budgets')
@@ -245,7 +229,6 @@ export async function GET(request: Request) {
 
         return NextResponse.json({
             success: true,
-            time_window: timeWindow,
             candidates: notifications.length,
             deduped: deduped.length,
             sent,
@@ -255,19 +238,6 @@ export async function GET(request: Request) {
         console.error('Cron notification error:', error);
         return NextResponse.json({ error: 'Server error' }, { status: 500 });
     }
-}
-
-/**
- * Check if a user's preferred time falls within the current 15-min window.
- */
-function isInTimeWindow(userTime: string, windowStart: string): boolean {
-    const [uh, um] = userTime.split(':').map(Number);
-    const [wh, wm] = windowStart.split(':').map(Number);
-
-    const userMinutes = uh * 60 + um;
-    const windowMinutes = wh * 60 + wm;
-
-    return userMinutes >= windowMinutes && userMinutes < windowMinutes + 15;
 }
 
 /**
