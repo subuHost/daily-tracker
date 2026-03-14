@@ -30,6 +30,7 @@ export async function middleware(req: NextRequest) {
         "/settings",
         "/notifications",
         "/chat",
+        "/ai",
     ];
 
     const isProtectedRoute = protectedRoutes.some((route) =>

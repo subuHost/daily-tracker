@@ -1,9 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, TrendingDown, Minus, Star, Trash2 } from "lucide-react";
+import {
+    Sheet,
+    SheetContent,
+    SheetTrigger,
+} from "@/components/ui/sheet";
+import { TrendingUp, TrendingDown, Minus, Star, Trash2, Brain } from "lucide-react";
 import type { WatchlistItem } from "@/lib/db/watchlist";
 import type { StockQuote } from "@/app/actions/stocks";
+import { ResearchPanel } from "./research-panel";
 
 interface WatchlistItemRowProps {
     item: WatchlistItem;
@@ -13,6 +20,7 @@ interface WatchlistItemRowProps {
 }
 
 export function WatchlistItemRow({ item, quote, onClick, onRemove }: WatchlistItemRowProps) {
+    const [researchOpen, setResearchOpen] = useState(false);
     const isPositive = quote ? quote.change > 0 : false;
     const isNeutral = quote ? quote.change === 0 : true;
 
@@ -68,6 +76,31 @@ export function WatchlistItemRow({ item, quote, onClick, onRemove }: WatchlistIt
                         <p className="text-sm text-muted-foreground">Loading...</p>
                     </div>
                 )}
+
+                {/* AI Research button */}
+                <Sheet open={researchOpen} onOpenChange={setResearchOpen}>
+                    <SheetTrigger asChild>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                            }}
+                            title="AI Research"
+                        >
+                            <Brain className="h-3.5 w-3.5 text-blue-500" />
+                        </Button>
+                    </SheetTrigger>
+                    <SheetContent side="right" className="w-full sm:w-[480px] p-0 overflow-y-auto">
+                        <div className="p-4">
+                            <ResearchPanel
+                                symbol={item.symbol}
+                                companyName={item.name || undefined}
+                            />
+                        </div>
+                    </SheetContent>
+                </Sheet>
 
                 <Button
                     variant="ghost"

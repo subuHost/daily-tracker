@@ -21,13 +21,11 @@ export async function fetchLivePrices(investments: InvestmentRef[]): Promise<Rec
     const stocks = investments.filter(inv => inv.type === "stock" || inv.type === "mutual_fund");
     const cryptos = investments.filter(inv => inv.type === "crypto");
 
-    // Fetch Stocks & Mutual Funds via Finnhub
+    // Fetch Stocks & Mutual Funds
+    // Pass symbol directly — getStockQuote handles .NS/.BO suffix routing to Yahoo
     const stockPromises = stocks.map(async (inv) => {
         try {
-            // Finnhub uses exchange-specific symbols
-            // For NSE stocks, Finnhub uses the raw symbol (no .NS suffix)
-            const symbol = inv.symbol.replace(/\.(NS|BO)$/i, "");
-            const quote = await getStockQuote(symbol);
+            const quote = await getStockQuote(inv.symbol);
 
             if (quote && quote.current > 0) {
                 results[inv.id] = quote.current;

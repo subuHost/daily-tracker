@@ -14,14 +14,41 @@ export function TechTrendsCard() {
     const [isLoading, setIsLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
 
+    const CACHE_KEY = "tech_briefing_cache";
+
     const loadBriefing = async (forceRefresh = false) => {
         if (forceRefresh) setIsRefreshing(true);
         else setIsLoading(true);
 
         try {
+            const today = new Date().toISOString().split("T")[0];
+
+            if (!forceRefresh) {
+                const cached = localStorage.getItem(CACHE_KEY);
+                if (cached) {
+                    try {
+                        const parsed = JSON.parse(cached);
+                        if (parsed.date === today && parsed.briefing) {
+                            setBriefing(parsed.briefing);
+                            setCitations(parsed.citations || []);
+                            setIsLoading(false);
+                            return;
+                        }
+                    } catch {
+                        // ignore parse errors, fall through to server
+                    }
+                }
+            }
+
             const result = await generateTechBriefing();
             setBriefing(result.briefing);
             setCitations(result.citations || []);
+
+            localStorage.setItem(CACHE_KEY, JSON.stringify({
+                date: today,
+                briefing: result.briefing,
+                citations: result.citations || [],
+            }));
         } catch (error) {
             console.error("Failed to load tech briefing:", error);
             setBriefing("Failed to load tech trends. Please try again.");

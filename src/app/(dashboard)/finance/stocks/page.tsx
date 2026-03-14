@@ -22,6 +22,7 @@ import Link from "next/link";
 
 import { StockCard } from "@/components/finance/stocks/stock-card";
 import { WatchlistItemRow } from "@/components/finance/stocks/watchlist-item";
+import { StockAiBriefing } from "@/components/finance/stocks/stock-ai-briefing";
 import {
     getStockQuotes,
     searchSymbol,
@@ -121,8 +122,22 @@ export default function StocksPage() {
             setWatchlistItems(items);
 
             if (items.length > 0) {
-                const symbols = items.map((i) => i.symbol);
-                const quotes = await getStockQuotes(symbols);
+                // Build exchange-suffixed symbols for Yahoo Finance API
+                const suffixMap: Record<string, string> = {}; // suffixed → original
+                const symbols = items.map((i) => {
+                    let yahooSymbol = i.symbol;
+                    if (i.exchange === "NSE") yahooSymbol = `${i.symbol}.NS`;
+                    else if (i.exchange === "BSE") yahooSymbol = `${i.symbol}.BO`;
+                    suffixMap[yahooSymbol] = i.symbol;
+                    return yahooSymbol;
+                });
+                const rawQuotes = await getStockQuotes(symbols);
+                // Re-key quotes to original symbol (without suffix) for display lookup
+                const quotes: Record<string, StockQuote> = {};
+                for (const [key, quote] of Object.entries(rawQuotes)) {
+                    const originalSymbol = suffixMap[key] || key;
+                    quotes[originalSymbol] = quote;
+                }
                 setWatchlistQuotes(quotes);
             }
         } catch (error) {
@@ -366,6 +381,16 @@ export default function StocksPage() {
                     </Card>
                 )}
             </div>
+
+            {/* AI Briefing Card */}
+            {watchlistItems.length > 0 && (
+                <StockAiBriefing
+                    stocks={watchlistItems.map((i) => ({
+                        symbol: i.symbol,
+                        name: i.name || i.symbol,
+                    }))}
+                />
+            )}
 
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab}>
