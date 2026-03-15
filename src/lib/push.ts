@@ -54,7 +54,12 @@ export async function requestPushPermission() {
  * Check the current push subscription status and VAPID configuration.
  */
 export async function checkPushStatus(): Promise<{ subscribed: boolean; vapidConfigured: boolean; error?: string }> {
-    const vapidConfigured = !!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    const vapidConfigured = !!vapidKey && vapidKey.length > 20;
+
+    if (!vapidConfigured && vapidKey) {
+        return { subscribed: false, vapidConfigured: false, error: 'VAPID public key appears malformed (too short). Regenerate with: npx web-push generate-vapid-keys' };
+    }
 
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
         return { subscribed: false, vapidConfigured, error: 'Push not supported in this browser' };

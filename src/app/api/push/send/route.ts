@@ -10,7 +10,7 @@ const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY!;
 
 if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
     webpush.setVapidDetails(
-        'mailto:notifications@dailytracker.app',
+        process.env.VAPID_SUBJECT || 'mailto:notifications@dailytracker.app',
         VAPID_PUBLIC_KEY,
         VAPID_PRIVATE_KEY
     );

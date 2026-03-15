@@ -192,6 +192,12 @@ export async function GET(request: Request) {
             }
         }
 
+        // ── Portfolio Research (stock alerts) ─────────────────
+        // Trigger portfolio research in the background (don't block notifications)
+        fetch(`${APP_URL}/api/cron/portfolio-research?secret=${encodeURIComponent(process.env.CRON_SECRET || '')}`, {
+            method: 'GET',
+        }).catch(err => console.error('Portfolio research trigger failed:', err));
+
         // ── Send all notifications via internal API ──────────
         let sent = 0;
         let failed = 0;
