@@ -15,6 +15,9 @@ import {
     GraduationCap,
     X,
     Activity,
+    Mic,
+    Globe,
+    FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -30,6 +33,9 @@ const secondaryNavigation = [
     { name: "Gallery", href: "/gallery", icon: Image },
     { name: "Notes", href: "/notepad", icon: StickyNote },
     { name: "Reports", href: "/reports", icon: BarChart3 },
+    { name: "Voice AI", href: "/ai/voice", icon: Mic },
+    { name: "Web Search", href: "/ai/tools/search", icon: Globe },
+    { name: "Summarizer", href: "/ai/tools/summarizer", icon: FileText },
 ];
 
 interface MoreDrawerProps {

@@ -236,9 +236,15 @@ export function NotificationSettingsCard({ initialSettings }: NotificationSettin
                         {pushStatus && (
                             <div className="pt-1">
                                 {!pushStatus.vapidConfigured ? (
-                                    <p className="text-xs text-muted-foreground flex items-center gap-1.5 italic">
-                                        ❌ VAPID key not configured
-                                    </p>
+                                    <div className="text-xs text-muted-foreground space-y-1">
+                                        <p className="flex items-center gap-1.5 italic">
+                                            ❌ VAPID keys not configured
+                                        </p>
+                                        <p className="text-[10px] leading-relaxed opacity-75">
+                                            Add <code className="bg-muted px-1 rounded">NEXT_PUBLIC_VAPID_PUBLIC_KEY</code> and <code className="bg-muted px-1 rounded">VAPID_PRIVATE_KEY</code> to your environment variables (Vercel Dashboard → Settings → Environment Variables), then redeploy.
+                                            Generate keys with: <code className="bg-muted px-1 rounded">npx web-push generate-vapid-keys</code>
+                                        </p>
+                                    </div>
                                 ) : pushStatus.subscribed ? (
                                     <p className="text-xs text-emerald-500 font-medium flex items-center gap-1.5">
                                         ✅ Push subscription active

@@ -46,10 +46,123 @@ const YAHOO_USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
     'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1',
+    'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.43 Mobile Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
 ];
 
+let uaIndex = 0;
 function getRandomUA(): string {
-    return YAHOO_USER_AGENTS[Math.floor(Math.random() * YAHOO_USER_AGENTS.length)];
+    uaIndex = (uaIndex + 1) % YAHOO_USER_AGENTS.length;
+    return YAHOO_USER_AGENTS[uaIndex];
+}
+
+// ─── In-Memory Quote Cache (60s TTL) ──────────────────────────
+const quoteCache = new Map<string, { quote: StockQuote; timestamp: number }>();
+const CACHE_TTL_MS = 60_000; // 60 seconds
+
+function getCachedQuote(symbol: string): StockQuote | null {
+    const cached = quoteCache.get(symbol.toUpperCase());
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+        return cached.quote;
+    }
+    return null;
+}
+
+function setCachedQuote(symbol: string, quote: StockQuote): void {
+    quoteCache.set(symbol.toUpperCase(), { quote, timestamp: Date.now() });
+}
+
+// ─── Retry Helper ─────────────────────────────────────────────
+async function fetchWithRetry(
+    url: string,
+    options: RequestInit & { next?: { revalidate: number } },
+    retries = 2,
+    delayMs = 1000
+): Promise<Response | null> {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            const res = await fetch(url, {
+                ...options,
+                headers: { ...options.headers, 'User-Agent': getRandomUA() },
+            });
+            if (res.ok) return res;
+            if (res.status === 429 || res.status >= 500) {
+                // Rate limited or server error — worth retrying
+                if (attempt < retries) {
+                    await new Promise(r => setTimeout(r, delayMs * (attempt + 1)));
+                    continue;
+                }
+            }
+            // 401/403 — don't retry, move to next fallback
+            return null;
+        } catch (error) {
+            if (attempt < retries) {
+                await new Promise(r => setTimeout(r, delayMs * (attempt + 1)));
+                continue;
+            }
+        }
+    }
+    return null;
+}
+
+// ─── Google Finance Fallback ──────────────────────────────────
+async function fetchGoogleFinanceQuote(yahooSymbol: string, originalSymbol: string): Promise<StockQuote | null> {
+    try {
+        // Convert Yahoo symbol format to Google Finance format
+        // RELIANCE.NS → RELIANCE:NSE, RELIANCE.BO → RELIANCE:BOM
+        let googleSymbol = originalSymbol.replace(/\.(NS|BO)$/i, '');
+        let exchange = 'NSE';
+        if (yahooSymbol.toUpperCase().endsWith('.BO')) exchange = 'BOM';
+
+        const url = `https://www.google.com/finance/quote/${encodeURIComponent(googleSymbol)}:${exchange}`;
+        const res = await fetch(url, {
+            headers: {
+                'User-Agent': getRandomUA(),
+                'Accept': 'text/html,application/xhtml+xml',
+                'Accept-Language': 'en-US,en;q=0.9',
+            },
+            next: { revalidate: 60 },
+        });
+
+        if (!res.ok) return null;
+
+        const html = await res.text();
+
+        // Google Finance embeds price in data attributes and specific patterns
+        // Look for the current price pattern: data-last-price="1234.56"
+        const priceMatch = html.match(/data-last-price="([0-9.]+)"/);
+        const changeMatch = html.match(/data-price-change="(-?[0-9.]+)"/);
+        const changePctMatch = html.match(/data-price-change-percent="(-?[0-9.]+)"/);
+        const prevCloseMatch = html.match(/data-previous-close="([0-9.]+)"/);
+
+        if (priceMatch) {
+            const current = parseFloat(priceMatch[1]);
+            if (current <= 0 || isNaN(current)) return null;
+
+            const change = changeMatch ? parseFloat(changeMatch[1]) : 0;
+            const changePercent = changePctMatch ? parseFloat(changePctMatch[1]) : 0;
+            const previousClose = prevCloseMatch ? parseFloat(prevCloseMatch[1]) : current - change;
+
+            return {
+                symbol: originalSymbol,
+                current,
+                high: current, // Google doesn't expose high/low easily
+                low: current,
+                open: previousClose,
+                previousClose,
+                change,
+                changePercent,
+                timestamp: Math.floor(Date.now() / 1000),
+            };
+        }
+
+        return null;
+    } catch (error) {
+        console.error(`Google Finance fallback error for ${originalSymbol}:`, error);
+        return null;
+    }
 }
 
 /**
@@ -74,46 +187,49 @@ function parseYahooQuoteData(meta: any, originalSymbol: string): StockQuote | nu
 
 /**
  * Fetch a quote from Yahoo Finance (for Indian stocks).
- * Tries v8 chart API first, falls back to v6 quote API on failure.
+ * Tries v8 chart API (with retry) → v6 quote API (with retry) → Google Finance scrape.
  */
 async function fetchYahooQuote(yahooSymbol: string, originalSymbol: string): Promise<StockQuote | null> {
-    // Attempt 1: v8 chart endpoint
+    // Check cache first
+    const cached = getCachedQuote(yahooSymbol);
+    if (cached) return { ...cached, symbol: originalSymbol };
+
+    // Attempt 1: v8 chart endpoint (with retry)
     try {
-        const res = await fetch(
+        const res = await fetchWithRetry(
             `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}`,
-            {
-                next: { revalidate: 30 },
-                headers: { 'User-Agent': getRandomUA() }
-            }
+            { next: { revalidate: 30 } },
+            2, 800
         );
 
-        if (res.ok) {
+        if (res) {
             const data = await res.json();
             const result = data.chart?.result?.[0];
             if (result?.meta) {
                 const quote = parseYahooQuoteData(result.meta, originalSymbol);
-                if (quote) return quote;
+                if (quote) {
+                    setCachedQuote(yahooSymbol, quote);
+                    return quote;
+                }
             }
         }
     } catch (error) {
         console.error(`Yahoo v8 error for ${yahooSymbol}:`, error);
     }
 
-    // Attempt 2: v6 quote endpoint (fallback)
+    // Attempt 2: v6 quote endpoint with retry (fallback)
     try {
-        const res = await fetch(
+        const res = await fetchWithRetry(
             `https://query2.finance.yahoo.com/v6/finance/quote?symbols=${encodeURIComponent(yahooSymbol)}`,
-            {
-                next: { revalidate: 30 },
-                headers: { 'User-Agent': getRandomUA() }
-            }
+            { next: { revalidate: 30 } },
+            2, 800
         );
 
-        if (res.ok) {
+        if (res) {
             const data = await res.json();
             const q = data.quoteResponse?.result?.[0];
-            if (q) {
-                return {
+            if (q && q.regularMarketPrice) {
+                const quote: StockQuote = {
                     symbol: originalSymbol,
                     current: q.regularMarketPrice || 0,
                     high: q.regularMarketDayHigh || 0,
@@ -124,10 +240,23 @@ async function fetchYahooQuote(yahooSymbol: string, originalSymbol: string): Pro
                     changePercent: q.regularMarketChangePercent || 0,
                     timestamp: q.regularMarketTime || Math.floor(Date.now() / 1000),
                 };
+                setCachedQuote(yahooSymbol, quote);
+                return quote;
             }
         }
     } catch (error) {
         console.error(`Yahoo v6 fallback error for ${yahooSymbol}:`, error);
+    }
+
+    // Attempt 3: Google Finance scrape (last resort)
+    try {
+        const googleQuote = await fetchGoogleFinanceQuote(yahooSymbol, originalSymbol);
+        if (googleQuote) {
+            setCachedQuote(yahooSymbol, googleQuote);
+            return googleQuote;
+        }
+    } catch (error) {
+        console.error(`Google Finance fallback error for ${yahooSymbol}:`, error);
     }
 
     return null;
@@ -195,9 +324,14 @@ export interface StockQuote {
 }
 
 /**
- * Fetch a real-time stock quote from Finnhub.
+ * Fetch a real-time stock quote.
+ * Routes to Yahoo Finance (with Google Finance fallback) for Indian stocks, Finnhub for US.
  */
 export async function getStockQuote(symbol: string): Promise<StockQuote | null> {
+    // Check cache first
+    const cached = getCachedQuote(symbol);
+    if (cached) return cached;
+
     const exchange = detectExchange(symbol);
 
     if (exchange !== 'US') {
@@ -208,7 +342,7 @@ export async function getStockQuote(symbol: string): Promise<StockQuote | null> 
         const key = getFinnhubKey();
         const res = await fetch(
             `${FINNHUB_BASE}/quote?symbol=${encodeURIComponent(symbol)}&token=${key}`,
-            { next: { revalidate: 30 } } // Cache for 30 seconds
+            { next: { revalidate: 30 } }
         );
 
         if (!res.ok) {
@@ -218,10 +352,9 @@ export async function getStockQuote(symbol: string): Promise<StockQuote | null> 
 
         const data = await res.json();
 
-        // Finnhub returns c=0 when symbol is not found
         if (!data.c || data.c === 0) return null;
 
-        return {
+        const quote: StockQuote = {
             symbol,
             current: data.c,
             high: data.h,
@@ -232,6 +365,8 @@ export async function getStockQuote(symbol: string): Promise<StockQuote | null> 
             changePercent: data.dp,
             timestamp: data.t,
         };
+        setCachedQuote(symbol, quote);
+        return quote;
     } catch (error) {
         console.error(`Failed to fetch quote for ${symbol}:`, error);
         return null;

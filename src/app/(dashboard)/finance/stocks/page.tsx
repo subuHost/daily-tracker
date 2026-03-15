@@ -16,6 +16,8 @@ import {
     Briefcase,
     RefreshCw,
     ArrowLeft,
+    MessageCircle,
+    BrainCircuit,
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -249,6 +251,17 @@ export default function StocksPage() {
                     </div>
                 </div>
                 <div className="flex gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        asChild
+                        className="gap-1.5"
+                    >
+                        <Link href="/finance/stocks/chat">
+                            <BrainCircuit className="h-4 w-4" />
+                            <span className="hidden sm:inline">AI Chat</span>
+                        </Link>
+                    </Button>
                     <Button
                         variant="outline"
                         size="sm"
